@@ -1,0 +1,141 @@
+/* Orsay widgets render in a 960x540 coordinate space (scaled up by the TV).
+   Old WebKit: absolute layout, no flexbox, no transforms. */
+html { margin: 0; padding: 0; width: 960px; height: 540px; overflow: hidden; }
+body {
+	margin: 0;
+	padding: 0;
+	width: 960px;
+	height: 540px;
+	overflow: hidden;
+	background: #0d1117;
+	color: #e8ecf1;
+	font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Video plays on a plane behind the page. */
+body.playing { background: transparent; }
+body.playing #shelf { display: none; }
+
+#anchor { position: absolute; left: -10px; top: -10px; width: 1px; height: 1px; }
+
+/* The shelf itself is the backdrop; Main.tint() sets its gradient from the selected movie. No separate layer. */
+#shelf { position: absolute; left: 0px; top: 0px; width: 960px; height: 540px; background: #0b0e14; }
+#dbg { position: absolute; left: 36px; top: 2px; font-size: 9px; color: #3f4a5c; }
+
+/* Header */
+#header { position: absolute; left: 36px; top: 14px; width: 850px; height: 36px; }
+#hTitle { font-size: 24px; font-weight: bold; letter-spacing: 1px; }
+#hVer { margin-left: 8px; font-size: 13px; color: #8a96a8; }
+#hCount {
+	margin-left: 12px; padding: 2px 10px; font-size: 12px; color: #ffb400;
+	border: 1px solid #ffb400; -webkit-border-radius: 11px; border-radius: 11px;
+}
+#pos { position: absolute; right: 0px; top: 8px; font-size: 13px; color: #8a96a8; }
+#letter { position: absolute; right: 90px; top: -2px; font-size: 32px; font-weight: bold; color: rgba(255, 255, 255, 0.18); }
+
+#grid { position: absolute; left: 0px; top: 0px; width: 960px; height: 540px; }
+
+/* Cards: 112x168 poster, 12px gap, 2 visible rows */
+.cell { position: absolute; width: 112px; height: 216px; }
+/* Unselected tiles are dimmed with an overlay, not opacity (opacity misstacks on old WebKit). */
+.dim { position: absolute; left: 0px; top: 0px; width: 106px; height: 162px; background: rgba(0, 0, 0, 0.38); }
+.cell.sel .dim { display: none; }
+
+.poster {
+	position: absolute; left: 0px; top: 0px; width: 112px; height: 168px;
+	-webkit-box-sizing: border-box; box-sizing: border-box;
+	border: 3px solid #0d1117; background: #1d2433; overflow: hidden;
+	-webkit-border-radius: 8px; border-radius: 8px;
+}
+.poster img { position: absolute; left: 0px; top: 0px; width: 106px; height: 162px; }
+.cell.sel .poster {
+	border-color: #ffb400;
+	-webkit-box-shadow: 0 0 16px rgba(255, 180, 0, 0.6); box-shadow: 0 0 16px rgba(255, 180, 0, 0.6);
+}
+
+/* Placeholder shown until (or instead of) a poster */
+.ph { position: absolute; left: 0px; top: 0px; width: 106px; height: 162px; }
+.ph .ini { position: absolute; left: 0px; top: 30px; width: 106px; font-size: 46px; font-weight: bold; text-align: center; color: rgba(255, 255, 255, 0.55); }
+.ph .nm { position: absolute; left: 6px; top: 96px; width: 94px; height: 58px; overflow: hidden; font-size: 12px; line-height: 14px; text-align: center; color: rgba(255, 255, 255, 0.85); }
+.p0 { background: #3b4f8f; background: -webkit-linear-gradient(top, #4c66b8, #28365f); }
+.p1 { background: #7a3b6b; background: -webkit-linear-gradient(top, #a34f8f, #4d2443); }
+.p2 { background: #2f7a6b; background: -webkit-linear-gradient(top, #3fa28d, #1d4b42); }
+.p3 { background: #8a5a2b; background: -webkit-linear-gradient(top, #b87a3a, #553617); }
+.p4 { background: #6b3b3b; background: -webkit-linear-gradient(top, #944f4f, #402323); }
+.p5 { background: #4b6b2f; background: -webkit-linear-gradient(top, #639140, #2c401c); }
+.p6 { background: #3b6b8a; background: -webkit-linear-gradient(top, #4f93bd, #234155); }
+.p7 { background: #5b3b8a; background: -webkit-linear-gradient(top, #7b4fc0, #36234f); }
+
+.ctitle { position: absolute; left: 0px; top: 173px; width: 112px; height: 28px; font-size: 12px; line-height: 14px; overflow: hidden; text-align: center; color: #b9c3d3; }
+.cyear { position: absolute; left: 0px; top: 201px; width: 112px; font-size: 11px; text-align: center; color: #6c7889; }
+.cell.sel .ctitle { color: #ffffff; font-weight: bold; }
+.cell.sel .cyear { color: #ffb400; }
+
+.cres {
+	position: absolute; left: 5px; top: 5px; padding: 1px 6px; font-size: 10px; font-weight: bold;
+	background: #ffb400; color: #11151c; display: none;
+	-webkit-border-radius: 8px; border-radius: 8px;
+}
+
+/* Vertical scroll indicator */
+#track { position: absolute; left: 924px; top: 60px; width: 5px; height: 440px; background: rgba(255, 255, 255, 0.12); -webkit-border-radius: 3px; border-radius: 3px; }
+#thumb { position: absolute; left: 0px; top: 0px; width: 5px; height: 80px; background: #ffb400; -webkit-border-radius: 3px; border-radius: 3px; }
+
+#status { position: absolute; left: 36px; top: 200px; width: 888px; text-align: center; }
+#status .st { font-size: 24px; font-weight: bold; color: #e8ecf1; }
+#status .ss { margin-top: 10px; font-size: 14px; line-height: 20px; color: #8a96a8; }
+#hint { position: absolute; left: 36px; top: 514px; width: 888px; font-size: 11px; color: #5f6b7c; }
+#hint b { color: #c3ccd9; }
+
+/* Open Sans SemiBold (SIL OFL, see fonts/OpenSans-OFL.txt), bundled for subtitles only. */
+@font-face { font-family: 'SubFont'; src: url('../fonts/open-sans-latin-600-normal.woff') format('woff'); font-weight: normal; font-style: normal; }
+
+/* Subtitles: low on the screen, lifted above the control bar while it is showing */
+#sub {
+	display: none; position: absolute; left: 60px; top: 440px; width: 840px; text-align: center;
+	font-family: 'SubFont', Arial, Helvetica, sans-serif; font-size: 24px; line-height: 30px; font-weight: normal; color: #ffffff;
+	text-shadow: 0 0 4px #000000, 0 0 2px #000000, 1px 1px 3px #000000, -1px -1px 3px #000000;
+}
+body.osd #sub { top: 270px; }
+
+/* Playback OSD: title, progress with times, transport buttons, key hints */
+#osd {
+	display: none; position: absolute; left: 40px; top: 372px; width: 880px; height: 150px;
+	background: #000000; background: rgba(8, 10, 16, 0.82);
+	-webkit-border-radius: 12px; border-radius: 12px;
+}
+#osdTitle { position: absolute; left: 24px; top: 12px; width: 640px; height: 26px; font-size: 18px; font-weight: bold; overflow: hidden; }
+#osdMsg { position: absolute; right: 24px; top: 14px; font-size: 14px; color: #ffb400; }
+#osdCur { position: absolute; left: 24px; top: 44px; width: 64px; font-size: 13px; color: #c3ccd9; }
+#osdDur { position: absolute; right: 24px; top: 44px; width: 64px; font-size: 13px; color: #8a96a8; text-align: right; }
+#osdBar { position: absolute; left: 96px; top: 49px; width: 688px; height: 6px; background: #3a4452; -webkit-border-radius: 3px; border-radius: 3px; }
+#osdFill { width: 0px; height: 6px; background: #ffb400; -webkit-border-radius: 3px; border-radius: 3px; }
+
+#osdBtns { position: absolute; left: 0px; top: 68px; width: 880px; height: 48px; }
+.btn {
+	position: absolute; top: 2px; width: 44px; height: 44px;
+	background: #2a3242; background: rgba(255, 255, 255, 0.14);
+	-webkit-border-radius: 22px; border-radius: 22px;
+}
+.btn.big { top: 0px; width: 52px; height: 52px; -webkit-border-radius: 26px; border-radius: 26px; }
+.btn.f { background: #ffb400; }
+#b0 { left: 270px; } #b1 { left: 330px; } #b2 { left: 414px; } #b3 { left: 486px; } #b4 { left: 546px; }
+
+/* Icons are drawn with borders; old WebKit may lack symbol glyphs. */
+.btn i { position: absolute; display: block; width: 0px; height: 0px; font-size: 0px; }
+.btn .tr { border-left: 12px solid #ffffff; border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
+.btn .tl { border-right: 12px solid #ffffff; border-top: 8px solid transparent; border-bottom: 8px solid transparent; }
+.btn .bar { width: 5px; height: 18px; background: #ffffff; }
+.btn .sq { width: 16px; height: 16px; background: #ffffff; }
+.btn.f .tr { border-left-color: #11151c; }
+.btn.f .tl { border-right-color: #11151c; }
+.btn.f .bar, .btn.f .sq { background: #11151c; }
+
+#osdKeys { position: absolute; left: 24px; top: 124px; width: 832px; font-size: 11px; color: #6c7889; text-align: center; }
+#osdKeys b { color: #c3ccd9; }
+
+#log {
+	display: none; position: absolute; left: 10px; top: 10px; width: 940px; height: 520px;
+	background: #000000; background: rgba(0, 0, 0, 0.9); color: #9fe49f;
+	font-family: monospace; font-size: 12px; line-height: 16px; overflow: hidden; white-space: pre;
+}

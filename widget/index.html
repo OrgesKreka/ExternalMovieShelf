@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>Movie Shelf</title>
+<script type="text/javascript">
+window.bootErrors = [];
+window.onerror = function (msg, url, line) {
+	var s = msg + ' @' + String(url).split('/').pop() + ':' + line;
+	window.bootErrors.push(s);
+	var b = document.getElementById('boot');
+	if (b) { b.innerHTML += '<br>ERROR: ' + s; b.style.display = 'block'; }
+	try { alert('[MovieShelf] ' + s); } catch (e) {}
+	return true;
+};
+</script>
+<script type="text/javascript" src="$MANAGER_WIDGET/Common/API/Widget.js"></script>
+<script type="text/javascript" src="$MANAGER_WIDGET/Common/API/TVKeyValue.js"></script>
+<script type="text/javascript" src="$MANAGER_WIDGET/Common/API/Plugin.js"></script>
+<link rel="stylesheet" type="text/css" href="css/style.css">
+<script type="text/javascript" src="js/log.js"></script>
+<script type="text/javascript" src="js/store.js"></script>
+<script type="text/javascript" src="js/usb.js"></script>
+<script type="text/javascript" src="js/subs.js"></script>
+<script type="text/javascript" src="js/player.js"></script>
+<script type="text/javascript" src="js/main.js"></script>
+</head>
+<body onload="if (window.Main) { Main.onLoad(); } else { document.getElementById('boot').innerHTML += '<br>Main not defined (script failed to load)'; }">
+
+<div id="boot" style="position:absolute;left:40px;top:40px;width:880px;font-size:16px;color:#ffb400;">Movie Shelf loading...</div>
+
+<object id="pluginPlayer" classid="clsid:SAMSUNG-INFOLINK-PLAYER" style="position:absolute;left:0px;top:0px;width:0px;height:0px;"></object>
+<object id="pluginAudio" classid="clsid:SAMSUNG-INFOLINK-AUDIO" style="position:absolute;left:0px;top:0px;width:0px;height:0px;"></object>
+<object id="pluginNavi" classid="clsid:SAMSUNG-INFOLINK-NNAVI" style="position:absolute;left:0px;top:0px;width:0px;height:0px;"></object>
+<object id="pluginStorage" classid="clsid:SAMSUNG-INFOLINK-STORAGE" style="position:absolute;left:0px;top:0px;width:0px;height:0px;"></object>
+
+<div id="shelf">
+	<div id="dbg"></div>
+	<div id="header">
+		<span id="hTitle">Movie Shelf</span><span id="hVer"></span>
+		<span id="hCount"></span>
+		<span id="letter"></span>
+		<span id="pos"></span>
+	</div>
+	<div id="grid"></div>
+	<div id="track"><div id="thumb"></div></div>
+	<div id="status"></div>
+	<div id="hint"><b>ENTER</b> play &nbsp; <b>ARROWS</b> move &nbsp; <b>YELLOW</b> next letter &nbsp; <b>RED</b> calibrate &nbsp; <b>GREEN</b> rescan &nbsp; <b>BLUE</b> log &nbsp; <b>RETURN</b> exit</div>
+</div>
+
+<div id="sub"></div>
+
+<div id="osd">
+	<div id="osdTitle"></div>
+	<div id="osdMsg"></div>
+	<div id="osdCur">0:00</div>
+	<div id="osdBar"><div id="osdFill"></div></div>
+	<div id="osdDur">0:00</div>
+	<div id="osdBtns">
+		<div class="btn" id="b0"></div>
+		<div class="btn" id="b1"></div>
+		<div class="btn big" id="b2"></div>
+		<div class="btn" id="b3"></div>
+		<div class="btn" id="b4"></div>
+	</div>
+	<div id="osdKeys"></div>
+</div>
+
+<div id="log"></div>
+
+<a href="javascript:void(0);" id="anchor" onkeydown="Main.onKeyDown(event);"></a>
+</body>
+</html>
