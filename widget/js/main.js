@@ -39,7 +39,7 @@ var Main = (function () {
 	   (1280x720 in the first builds) while actually displaying only the top-left 960x540, so scaling
 	   by the reported size made the page too big. The reported size is logged, not used. */
 	var BASE_W = 960, BASE_H = 540;
-	var VERSION = '0.2.0';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
+	var VERSION = '0.2.1';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
 
 	function fit() {
 		var w = window.innerWidth || document.documentElement.clientWidth || 0;

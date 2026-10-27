@@ -108,7 +108,7 @@ class RunTests(unittest.TestCase):
         api = FakeApi()
         stats = t.run(self.root, api, True, out=lambda l: None)
         folder = os.path.join(self.dir, "Filma", "Heat (1995) [tmdbid-949]")
-        self.assertTrue(slurp(os.path.join(folder, "heat.backdrop.jpg")).startswith(b"JPEGDATA/b949.jpg"))
+        self.assertTrue(slurp(os.path.join(folder, "backdrop.jpg")).startswith(b"JPEGDATA/b949.jpg"))
         self.assertIn(("backdrop", "/b949.jpg"), api.images)
         raw = slurp(os.path.join(folder, "heat.tmdb.json"), "r")
         raw.encode("ascii")                                                         # ASCII-only file
@@ -118,9 +118,41 @@ class RunTests(unittest.TestCase):
         self.assertEqual(info["title"], "Title 949 é")                      # escaped in the file, decoded by JSON
         self.assertIn("\\u00e9", raw)
         # the folder that already had a poster still gets its missing backdrop and details
-        self.assertTrue(os.path.isfile(os.path.join(self.dir, "Filma", "Has Poster [tmdbid-5]", "h.backdrop.jpg")))
+        self.assertTrue(os.path.isfile(os.path.join(self.dir, "Filma", "Has Poster [tmdbid-5]", "backdrop.jpg")))
         self.assertEqual(slurp(self.poster("Has Poster [tmdbid-5]"), "r"), "old")
         self.assertEqual((stats["backdrops"], stats["details"]), (3, 3))
+
+    def test_jellyfin_backdrop_names_count_as_existing(self):
+        make(self.dir, {"Filma/Fan [tmdbid-8]/f.mp4": "", "Filma/Fan [tmdbid-8]/fanart.jpg": "x", "Filma/Fan [tmdbid-8]/poster.jpg": "p",
+                        "Filma/Fan [tmdbid-8]/f.tmdb.json": "{}"})
+        api = FakeApi()
+        t.run(self.root, api, True, out=lambda l: None)
+        self.assertNotIn(8, api.asked)                              # complete: poster, fanart.jpg as backdrop, details
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "Filma", "Fan [tmdbid-8]", "backdrop.jpg")))
+
+    def test_old_backdrop_name_is_moved_to_the_jellyfin_name(self):
+        folder = os.path.join(self.dir, "Filma", "Old [tmdbid-9]")
+        make(self.dir, {"Filma/Old [tmdbid-9]/o.mp4": "", "Filma/Old [tmdbid-9]/poster.jpg": "p",
+                        "Filma/Old [tmdbid-9]/o.backdrop.jpg": "old", "Filma/Old [tmdbid-9]/o.tmdb.json": "{}"})
+        lines = []
+        t.run(self.root, None, False, out=lines.append)             # dry run: announces it, changes nothing
+        self.assertTrue(any("would rename o.backdrop.jpg" in l for l in lines))
+        self.assertTrue(os.path.exists(os.path.join(folder, "o.backdrop.jpg")))
+        api = FakeApi()
+        stats = t.run(self.root, api, True, out=lambda l: None)
+        self.assertEqual(slurp(os.path.join(folder, "backdrop.jpg"), "r"), "old")   # same file, new name
+        self.assertFalse(os.path.exists(os.path.join(folder, "o.backdrop.jpg")))
+        self.assertNotIn(9, api.asked)                              # nothing left to download for it
+        self.assertEqual(stats["migrated"], 1)
+
+    def test_several_videos_keep_names_after_the_video(self):
+        make(self.dir, {"Filma/Pair [tmdbid-6]/a.mp4": "", "Filma/Pair [tmdbid-6]/b.mp4": ""})
+        t.run(self.root, FakeApi(), True, out=lambda l: None)
+        folder = os.path.join(self.dir, "Filma", "Pair [tmdbid-6]")
+        self.assertTrue(os.path.isfile(os.path.join(folder, "a.backdrop.jpg")))
+        self.assertTrue(os.path.isfile(os.path.join(folder, "b.backdrop.jpg")))
+        self.assertTrue(os.path.isfile(os.path.join(folder, "a.jpg")))
+        self.assertFalse(os.path.exists(os.path.join(folder, "backdrop.jpg")))
 
     def test_second_run_downloads_nothing(self):
         t.run(self.root, FakeApi(), True, out=lambda l: None)
@@ -134,7 +166,7 @@ class RunTests(unittest.TestCase):
         t.run(self.root, api, True, extras=False, out=lambda l: None)
         folder = os.path.join(self.dir, "Filma", "Heat (1995) [tmdbid-949]")
         self.assertTrue(os.path.isfile(os.path.join(folder, "poster.jpg")))
-        self.assertFalse(os.path.exists(os.path.join(folder, "heat.backdrop.jpg")))
+        self.assertFalse(os.path.exists(os.path.join(folder, "backdrop.jpg")))
         self.assertFalse(os.path.exists(os.path.join(folder, "heat.tmdb.json")))
         self.assertEqual(sorted(api.asked), [7, 949])      # Has Poster is already complete in this mode
 

@@ -3,7 +3,11 @@ var Usb = (function () {
 	var VIDEO = /\.(mp4|m4v|mkv|avi|mov|wmv|ts|mpg|mpeg)$/i;
 	var IMAGE = /\.(jpe?g|png)$/i;
 	var SUB = /\.srt$/i;
-	var BACKDROP = /\.backdrop\.(jpe?g|png)$/i;   /* from tools/tmdb_posters.py; never a poster */
+	/* Backdrop pictures, named like Jellyfin does: backdrop.jpg, fanart.jpg, background.jpg, or after the video
+	   ("Name.backdrop.jpg", "Name-fanart.jpg"). Never used as a poster. */
+	var BACKDROP = /(^|[.\-])(backdrop|fanart|background)\d*\.(jpe?g|png)$/i;
+	/* Other Jellyfin artwork: ignored, so it cannot turn up as a poster either. */
+	var OTHER_ART = /(^|[.\-])(logo|banner|thumb|landscape|clearart|clearlogo|disc|discart)\d*\.(jpe?g|png)$/i;
 	var INFO = /\.tmdb\.json$/i;
 	var MAX_DEPTH = 4;
 	var MOVIE_DIR = 'filma';
@@ -132,6 +136,20 @@ var Usb = (function () {
 		return single && sorted.length ? sorted[0] : null;
 	}
 
+	/* The video's own backdrop ("Name.backdrop.jpg", "Name-backdrop.jpg", "Name-fanart.jpg"); in a one-movie
+	   folder also the folder's backdrop.jpg / fanart.jpg / background.jpg, in that order. */
+	function pickBackdrop(names, base, single) {
+		var b = base.toLowerCase(), sorted = names.slice().sort(), i, w;
+		var wants = [b + '.backdrop', b + '-backdrop', b + '-fanart'];
+		if (single) { wants = wants.concat(['backdrop', 'fanart', 'background']); }
+		for (w = 0; w < wants.length; w++) {
+			for (i = 0; i < sorted.length; i++) {
+				if (baseName(sorted[i]).toLowerCase() === wants[w]) { return sorted[i]; }
+			}
+		}
+		return null;
+	}
+
 	/* "<video base><suffix>" (e.g. ".tmdb.json"); a lone such file in a one-movie folder also counts. */
 	function pickSide(names, base, suffix, single) {
 		var i, want = (base + suffix).toLowerCase();
@@ -161,6 +179,7 @@ var Usb = (function () {
 				if (e.isDir) { dirs.push(e.name); }
 				else if (VIDEO.test(e.name)) { videos.push(e.name); }
 				else if (BACKDROP.test(e.name)) { backdrops.push(e.name); }
+				else if (OTHER_ART.test(e.name)) { continue; }
 				else if (IMAGE.test(e.name)) { images.push(e.name); }
 				else if (INFO.test(e.name)) { infos.push(e.name); }
 				else if (SUB.test(e.name)) { subs.push(e.name); }
@@ -174,7 +193,7 @@ var Usb = (function () {
 				c = cleanTitle(folderName);
 				poster = pickPoster(images, baseName(videos[0]), false);
 				sub = pickSub(subs, baseName(videos[0]), true);
-				bd = pickSide(backdrops, baseName(videos[0]), '.backdrop.jpg', true);
+				bd = pickBackdrop(backdrops, baseName(videos[0]), true);
 				inf = pickSide(infos, baseName(videos[0]), '.tmdb.json', true);
 				movies.push({
 					title: c.title, year: c.year, folder: path,
@@ -190,7 +209,7 @@ var Usb = (function () {
 					c = cleanTitle(base);
 					poster = pickPoster(images, base, true);
 					sub = pickSub(subs, base, false);
-					bd = pickSide(backdrops, base, '.backdrop.jpg', false);
+					bd = pickBackdrop(backdrops, base, false);
 					inf = pickSide(infos, base, '.tmdb.json', false);
 					movies.push({
 						title: c.title, year: c.year, folder: path,
@@ -294,6 +313,7 @@ var Usb = (function () {
 		pickPoster: pickPoster,
 		pickSub: pickSub,
 		pickSide: pickSide,
+		pickBackdrop: pickBackdrop,
 		scan: scan,
 		makeReader: makeReader,
 		findRoots: findRoots

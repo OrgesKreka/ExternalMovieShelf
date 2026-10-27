@@ -1,210 +1,240 @@
 # Movie Shelf
 
-A poster browser for movies on a USB drive, as a widget for Samsung 2013 F-series TVs (Orsay Smart Hub; developed on a UE46F6500). No extra device needed: the built-in player ignores `folder.jpg` and cover art, this widget shows a poster grid and plays the movie full screen.
+**A poster shelf for the movies on your USB drive, on older Samsung Smart TVs.**
 
-**Status: v0.2.0.** Browsing, posters, playback with a transport bar, resume, and SRT subtitles have been tried on a UE46F6500. Orsay APIs are poorly documented, so expect differences on other models.
+Plug a USB drive into a Samsung F-series TV (2013, "Orsay" Smart Hub) and its built-in browser shows a wall of grey folder icons and plays files with no cover art. Movie Shelf replaces that with a poster grid, a details screen, and a proper player with resume and subtitles. It runs on the TV itself. No streaming box, no PC left running, no server.
 
-## Layout
+Built and tested on a Samsung UE46F6500. Current version: **0.2.1**.
 
-```
-widget/              the Orsay widget (config.xml, index.html, css/, fonts/, icon/, js/)
-  js/main.js         grid, focus, scanning states, key handling, calibration screen
-  js/usb.js          find the USB mount, walk folders, pick posters/subtitles, clean titles, sort
-  js/player.js       playback, transport bar, resume, subtitles clock
-  js/subs.js         SRT parser and loader
-  js/info.js         reads the <video>.tmdb.json details file (plot, rating...) for the INFO screen
-  js/store.js        resume positions (FileSystem common file MovieShelf/resume.json)
-  js/log.js          on-screen log (Blue key)
-tools/serve.py       zips widget/, writes widgetlist.xml, serves on port 80 for App Sync
-tools/posters.py     shrinks posters to 300x450 poster.jpg (dry run unless --apply; needs Pillow)
-tools/tmdb_posters.py downloads posters, backdrops and details from TMDB by id (see Tools)
-tools/tmdb_tag.py    adds [tmdbid-N] to folders that lack it (TMDB search, only certain matches; has --undo)
-tools/make_icons.py  regenerates widget/icon/*.png (no dependencies)
-test/scan.test.js    node: scanning, titles, sorting, subtitles, backdrops/details, SRT parser, version match, ASCII-only scripts
-test/info.test.js    node: the details file parser and formatting
-test/player.test.js  node: playback logic against a fake TV plugin (shape, keys, resume rules, errors)
-test/test_tmdb.py    python: offline tests for both TMDB scripts (fake API)
-.github/workflows/   runs all of the above on every push
-```
+## Before and after
 
-## Install on the TV
+| The TV's own file browser | Movie Shelf |
+|---|---|
+| ![The TV's built-in file browser: folder icons with long names](docs/screenshots/before-file-browser.jpg) | ![Movie Shelf: a grid of posters, sorted by title](docs/screenshots/shelf.jpg) |
 
-1. PC: `python tools/serve.py` (port 80, may need an administrator terminal; prints the PC's IP and the version).
-2. TV: MENU > Smart Features > Samsung Account > Log in, ID `develop`.
-3. SMART HUB > More Apps > Options > IP Setting > the PC's IP.
-4. Options > Start App Sync. Open the **newest** Movie Shelf entry.
+| The TV's own player | Movie Shelf's player |
+|---|---|
+| ![The TV's built-in player showing the file name](docs/screenshots/before-player.jpg) | ![Movie Shelf's player: title, progress bar, transport buttons and key hints](docs/screenshots/player.jpg) |
 
-Every start of `serve.py` stamps a new widget id (`MovieShelf_<time>`), because the TV keeps a cached copy of an id it already knows. Delete old entries from More Apps now and then. `--stable-id` keeps the plain id. Restart `serve.py` after every code change. The version shows next to the title; it comes from `<ver>` in `widget/config.xml` and `VERSION` in `js/main.js` (keep them equal).
+Press **INFO** on a movie for the plot, rating, runtime and genres:
 
-## Folder rules
+![The details screen: poster, tagline, year, runtime, rating, genres and plot on the movie's backdrop](docs/screenshots/info.jpg)
 
-- The drive needs a folder named **`Filma`** (searched up to 3 levels down, any capitalisation); only that folder is scanned. Without it the shelf says so.
-- Up to 4 levels deep inside it; hidden/system folders are skipped.
-- A folder with exactly one video is one movie, titled by the folder name.
-- A folder with several videos gives one entry per video.
-- Poster: same base name as the video, then `poster.*`, `folder.*`, `cover.*`, then any `.jpg`/`.png`.
-- Subtitles: a `.srt` with the video's name (or `Name.xx.srt`); in a one-movie folder any single `.srt`.
-- Details and backdrop (both optional, written by `tools/tmdb_posters.py`): `<video name>.tmdb.json` and `<video name>.backdrop.jpg` next to the video. A backdrop is never used as a poster.
-- Titles: Jellyfin/Plex id tags such as `[tmdbid-949]` are hidden, dots/underscores become spaces, the last 19xx/20xx year is split out, rip tags (1080p, BluRay, x264...) are cut.
-- Sorted by the title as shown (A-Z, accents folded, numbers by value; "The ..." sorts under T).
-- No drive: the shelf keeps looking every few seconds. Missing `Filma` or no movies: a message, then GREEN rescans.
+## What you get
 
-## Tools
+- **A poster grid**, sorted by title (A-Z, "Part 2" before "Part 10"), with a scroll bar and a jump to the next letter.
+- **A details screen** (INFO key) with poster, plot, rating, runtime and genres on top of the movie's backdrop picture.
+- **A player** with play/pause, jump 30 seconds, restart and stop buttons, a progress bar, and the right picture shape for 4:3 and widescreen movies.
+- **Resume**: leave a movie and it continues where you stopped.
+- **Subtitles**: a `.srt` file next to the movie is picked up automatically.
+- **Posters and details downloaded for you**: two small scripts fill in the pictures and text from TMDB, the way Jellyfin does.
+- **Friendly messages** when no drive is plugged in, the folder is missing or it holds no movies.
 
-All scripts live in `tools/`, run from the project folder, and need Python 3. Only `posters.py` and (optionally) `tmdb_posters.py` use Pillow (`pip install pillow`).
+## What you need
 
-### serve.py: install the widget on the TV
+- A Samsung **F-series TV from 2013** (model code like `UE46F6500`) with the Smart Hub. Other Orsay-era models may work but are untested.
+- A PC on the same network, only to install the app (and to prepare the drive).
+- Python 3. For posters: a free TMDB key and, optionally, Pillow (`python -m pip install pillow`).
+- A USB drive with your movies.
+
+## Quick start
+
+1. **Prepare the drive.** Put a folder named `Filma` on it, with one folder per movie inside (see below).
+2. **Start the install server** on the PC: `python tools/serve.py`. It prints the PC's IP address. (Port 80 may need an administrator terminal.)
+3. **Tell the TV where it is.**
+   - MENU > Smart Features > Samsung Account > Log in with the ID `develop`.
+   - SMART HUB > More Apps > Options > IP Setting > enter the PC's IP address.
+   - Options > Start App Sync. Open the **newest** Movie Shelf entry.
+4. **Plug in the drive** (before or after starting the app). The shelf appears.
+
+After a code change, restart `serve.py` and run App Sync again. Each start creates a new entry in More Apps, because the TV remembers apps by id and would otherwise keep showing the old version; delete old entries now and then. The version number next to the title tells you which one you are looking at.
+
+## Set up your movie folders
 
 ```
-python tools/serve.py                 build the widget zip and serve it on port 80
-python tools/serve.py --stable-id     keep the plain widget id instead of stamping a new one
+E:\
+  Filma\
+    Heat (1995) [tmdbid-949]\
+      heat.mp4
+      heat.srt              subtitles, optional
+      poster.jpg            poster, optional
+      backdrop.jpg          backdrop picture, optional
+      heat.tmdb.json        details for the INFO screen, optional
+    Rope (1948)\
+      rope.mkv
 ```
 
-Zips `widget/`, writes `widgetlist.xml` and serves both for the TV's App Sync (see "Install on the TV"). It rebuilds on every start, so restart it after each code change. It prints the PC's IP (enter it on the TV under IP Setting) and the version. Port 80 may need an administrator terminal. Only one copy can run at a time; a second one says the port is in use.
+- Only the `Filma` folder is scanned (any capitalisation, found up to 3 levels down). Movies can sit up to 4 levels inside it.
+- **One video per folder** is one movie, titled by the folder name. Dots and underscores become spaces, the year is split out, and tags like `1080p`, `BluRay` or `[tmdbid-949]` are hidden.
+- A folder with **several videos** shows one entry per video.
+- **Subtitles**: a `.srt` named like the video (`heat.srt`, `heat.en.srt`). In a folder with one video, any `.srt` works; with several, the first alphabetically wins.
+- **Poster**: one named like the video, else `poster.*`, `folder.*`, `cover.*`, else any jpg/png in the folder.
+- **Backdrop**: `backdrop.jpg`, `fanart.jpg` or `background.jpg` (Jellyfin's names). For one of several videos: `<video name>.backdrop.jpg`. Jellyfin's `logo`, `banner`, `thumb` and `landscape` files are ignored, and a backdrop is never mistaken for a poster.
+- Video types: mp4, m4v, mkv, avi, mov, wmv, ts, mpg, mpeg. Whether a file plays still depends on the TV's decoder.
 
-### tmdb_tag.py: add the TMDB id to folder names
+## Get posters and details automatically
 
-```
-python tools/tmdb_tag.py E:\                  dry run: shows the renames, changes nothing
-python tools/tmdb_tag.py E:\ --apply          rename the folders
-python tools/tmdb_tag.py E:\ --undo           dry run of the undo
-python tools/tmdb_tag.py E:\ --undo --apply   put the old names back
-```
+Two scripts do this. Both are safe to try: they only show what they would do until you add `--apply`.
 
-Every applied rename is written to a hidden log, `.tmdb_renames.log`, inside the `Filma` folder. `--undo` reads it, renames the folders back (newest first) and then deletes the log. An entry is skipped, and the log kept, if the renamed folder is gone or the old name is already taken.
-
-For every movie folder without an id, it takes the title and year from the folder name, searches TMDB, and renames `Heat (1995)` to `Heat (1995) [tmdbid-949]`. It renames only when the match is certain: identical title (ignoring case and punctuation) and the same year, or, with no year in the name, exactly one identical title. Anything else is printed as `unsure` with up to three candidates and left alone; add those ids by hand (the id is the number in `themoviedb.org/movie/949-heat`). Folders that already have an id, and folders with several videos, are skipped. Needs the TMDB key (below). The dry run also calls TMDB, since it needs the search results.
-
-### tmdb_posters.py: download posters, backdrops and details
+**1. Get a free TMDB key** at https://www.themoviedb.org/settings/api (the "API Key" or the long "Read Access Token", both work) and set it. In PowerShell, for the current window:
 
 ```
-python tools/tmdb_posters.py E:\                         dry run: lists what it would download (no key, no network)
-python tools/tmdb_posters.py E:\ --apply                 download
-python tools/tmdb_posters.py E:\ --apply --posters-only  only the posters, as before
+$env:TMDB_API_KEY = "your_key"
 ```
 
-For every movie folder whose **folder name carries the TMDB id**, Jellyfin style (`Heat (1995) [tmdbid-949]`, also `{tmdb-949}`), it fetches the movie once from TMDB and saves up to three files next to the video:
+or permanently with `setx TMDB_API_KEY "your_key"` (new terminals only). The key is never written to disk, so keep it out of the repository too.
+
+**2. Give each folder its TMDB id** (skip if the names already have it). `tmdb_tag.py` searches TMDB by the folder's title and year and renames `Heat (1995)` to `Heat (1995) [tmdbid-949]`:
+
+```
+python tools/tmdb_tag.py E:\            shows the renames, changes nothing
+python tools/tmdb_tag.py E:\ --apply    does them
+python tools/tmdb_tag.py E:\ --undo --apply    puts the old names back
+```
+
+It renames only when it is certain: the title is identical and the year agrees (or, without a year, only one movie has that title). Everything else is printed as `unsure` with candidates, and you add those ids by hand: the id is the number in the movie's TMDB address, `themoviedb.org/movie/949-heat`. Every rename is logged in a hidden `.tmdb_renames.log` inside `Filma`, which `--undo` uses.
+
+**3. Download the pictures and text.** `tmdb_posters.py` handles every folder whose name has `[tmdbid-N]` and ignores the rest:
+
+```
+python tools/tmdb_posters.py E:\            shows what it would download
+python tools/tmdb_posters.py E:\ --apply    downloads
+```
+
+For each movie it saves, into the movie's own folder:
 
 | File | What | Used for |
 |---|---|---|
-| `poster.jpg` (several videos in a folder: `<video name>.jpg`) | poster, 300x450 | the tiles |
-| `<video name>.backdrop.jpg` | backdrop picture, 640x360 | the shelf background and the INFO screen |
-| `<video name>.tmdb.json` | title, year, tagline, rating, runtime, genres, plot (ASCII-only JSON) | the INFO screen |
+| `poster.jpg` | poster, 300x450 | the tiles |
+| `backdrop.jpg` | backdrop picture, 640x360 | the shelf background and the INFO screen |
+| `<video name>.tmdb.json` | title, year, tagline, rating, runtime, genres, plot | the INFO screen |
 
-Folders without an id are ignored silently (the summary counts them). A file that already exists is never replaced, and each file is checked on its own: a folder that has a poster but no backdrop gets just the backdrop, and a run over a finished drive downloads nothing. Delete a file to fetch it again. Other options: `--size` (TMDB poster size, default `w342`) and `--language` (default `en-US`, also the language of the plot). With Pillow the images are shrunk to the sizes above as baseline JPEG, which suits the TV; without it they are saved as TMDB delivers them (poster 342x513, backdrop 780x439).
+Existing files are never replaced, and each file is checked on its own, so running it again only fills the gaps. Delete a file to fetch it again. Options: `--posters-only`, `--size` (poster size, default `w342`), `--language` (default `en-US`, also the language of the plot). With Pillow installed the pictures are shrunk to the sizes above, which the TV likes; without it they are saved as TMDB delivers them.
 
-Typical order: `tmdb_tag.py` (rename), then `tmdb_posters.py` (download).
+Already have posters that are too big for the TV? `python tools/posters.py E:\ --apply` shrinks them to 300x450 (the old file is kept as `poster.orig.bak`).
 
-**TMDB key.** Both TMDB scripts read it from the `TMDB_API_KEY` environment variable, or `--key`. Get a free key at https://www.themoviedb.org/settings/api; the v3 API key and the long v4 read access token (starts with `eyJ`) both work. Set it permanently with `setx TMDB_API_KEY "your_key"` (new terminals only), or for one PowerShell window with `$env:TMDB_API_KEY = "your_key"`. It is never written to disk; keep it out of the repository. The network parts have only been tested against a fake API, not TMDB itself.
+## Using the remote
 
-### posters.py: shrink existing posters
-
-```
-python tools/posters.py E:\             dry run
-python tools/posters.py E:\ --apply     write poster.jpg
-```
-
-For posters you already have: converts each movie folder's poster to a 300x450 baseline `poster.jpg` (the TV has little memory and rejects some JPEG types). A `poster.jpg` that gets replaced is first copied to `poster.orig.bak`. Needs Pillow.
-
-### make_icons.py: regenerate the app icons
-
-`python tools/make_icons.py` rewrites `widget/icon/icon_*.png` (the four Smart Hub sizes). No dependencies; edit the colors at the top of the script to restyle.
-
-## Keys
-
-| Where | Key | Action |
+| Where | Key | What it does |
 |---|---|---|
-| Shelf | arrows | move (Left/Right wrap to the next row) |
-| Shelf | Enter / Play | play |
-| Shelf | Info | details screen: poster, plot, rating, runtime, genres on the movie's backdrop |
-| Details | Left / Right | previous / next movie |
-| Details | Enter / Play | play |
-| Details | Return / Info | back to the shelf |
-| Shelf | Yellow | jump to the next letter |
-| Shelf | Green | rescan |
-| Shelf | Blue | toggle the log |
-| Shelf | Red | calibration screen (shows what the TV really displays) |
-| Shelf | Return | exit |
-| Playing | Enter / Play / Pause | pause / resume |
-| Playing | Left, Right / RW, FF | jump 30 s |
-| Playing | Down, then Left/Right, Enter | select and press a transport button |
-| Playing | Yellow | subtitles on/off |
-| Playing | Green | picture shape: Auto / 16:9 / 4:3 / 1.85:1 / 2.35:1 (remembered per movie) |
-| Playing | Red | restart |
-| Playing | Return / Stop | back to the shelf (saves the position if past 60 s) |
+| Shelf | Arrows | Move (Left/Right wrap to the next row) |
+| Shelf | Enter / Play | Play |
+| Shelf | **Info** | Details screen |
+| Shelf | Yellow | Jump to the next letter |
+| Shelf | Green | Look for the drive and movies again |
+| Shelf | Blue | Show or hide the log (for troubleshooting) |
+| Shelf | Red | Calibration screen (shows what the TV really displays) |
+| Shelf | Return | Exit |
+| Details | Left / Right | Previous / next movie |
+| Details | Enter / Play | Play |
+| Details | Return / Info | Back to the shelf |
+| Playing | Enter / Play / Pause | Pause / resume |
+| Playing | Left, Right / RW, FF | Jump 30 seconds |
+| Playing | Down, then Left/Right, Enter | Pick and press a button on the screen |
+| Playing | Yellow | Subtitles on / off |
+| Playing | Green | Picture shape: Auto / 16:9 / 4:3 / 1.85:1 / 2.35:1 (remembered per movie) |
+| Playing | Red | Restart |
+| Playing | Return / Stop | Back to the shelf (remembers the position if you got past 1 minute) |
 
-## Known limitations
+## Good to know
 
-Scanning
-- A folder with exactly one video is treated as one movie and its subfolders are not scanned, so a folder holding a movie plus other movie folders loses the nested ones.
-- Extra videos next to a movie (for example `sample.mp4` or a trailer) count as a second video, so the folder is listed per file instead of as one movie.
-- Only the `Filma` folder is scanned. Without it the shelf shows a message; there is no fallback to the whole drive.
-- Video types: mp4, m4v, mkv, avi, mov, wmv, ts, mpg, mpeg. Whether a file plays still depends on what the TV's decoder supports.
-- Unplugging the drive while browsing is not noticed; press GREEN to rescan.
+These are the known limits, so nothing comes as a surprise.
 
-Playback and subtitles
-- Only `.srt` subtitles are read (no `.sub`, `.ass`, `.vtt`). Files are decoded as UTF-8, else Windows-1252; other encodings (UTF-16, Windows-1250 letters such as s-cedilla) can show wrong characters.
-- Subtitles are drawn by the widget, not by the TV, and follow the player's 1 s time callback smoothed to about 0.2 s, so they can drift by a fraction of a second. There is no subtitle sync adjustment and no choice between several subtitle files.
-- The bundled subtitle font covers Western European letters only.
-- The picture is fitted to the video's pixel size (checked on a UE46F6500 with a 4:3 movie and a 2.79:1 one: same shape as the TV's own player; the Green key overrides it by hand). Videos with non-square pixels (some DVD rips) report a size that differs from their true shape, so they may look slightly stretched; the TV's own player corrects for that.
-- Audio codecs the TV cannot decode (for example some AC3/DTS tracks in MP4) play without sound; the widget cannot work around that.
-- The widget cannot hand a file to the TV's built-in media player, so the controls are the widget's own.
+**Movies and folders**
+- A folder with exactly one video is one movie and its subfolders are not scanned, so a movie folder that also holds other movie folders hides the inner ones.
+- An extra video next to a movie (a `sample.mp4`, a trailer) makes the folder list one entry per file.
+- Only `Filma` is scanned; there is no fallback to the whole drive.
+- Unplugging the drive while browsing is not noticed. Press Green to look again.
 
-Platform
-- Developed and tried on one TV (UE46F6500). Other Orsay models may report different screen sizes, lack the Storage/Audio plugin calls used here, or reject the install.
-- Resume positions are saved only when you leave past 60 s and more than 60 s remain, and are kept in a file on the TV, not on the drive.
-- The TV keeps a cached copy per widget id, so each `serve.py` start installs a new entry; old entries must be deleted by hand.
-- The INFO screen, the backdrop pictures and the INFO key work on the UE46F6500 (v0.2.0). Other models may not deliver the INFO key to widgets; see Troubleshooting.
-- The details text is cut at about 700 characters, and the plot is in the language chosen with `--language` when it was downloaded.
-- The poster backdrop color needs canvas access to the poster file; where the TV blocks it, a color from the title is used instead.
+**Playing and subtitles**
+- Only `.srt` subtitles are read (no `.ass`, `.vtt`, `.sub`), as UTF-8 or Windows-1252. Other encodings can show wrong letters.
+- The widget draws the subtitles itself, following the player's clock to within a fraction of a second. There is no sync adjustment and no choice between several subtitle files. The bundled font (Open Sans SemiBold) covers Western European letters only.
+- The picture is fitted to the video's pixel size. Videos with non-square pixels (some DVD rips) may look slightly stretched; Green lets you pick another shape.
+- If the TV cannot decode an audio track (some AC3/DTS tracks in MP4), the movie plays without sound. The widget cannot change that.
+- The widget cannot hand a file to the TV's own player, so the on-screen controls are the widget's.
 
-## Lessons from the TV
-
-- Widgets are laid out in a **960x540** space. `window.innerWidth` reports whatever `config.xml` declares, so it is logged but not trusted.
-- The TV's installer rejects pages that contain undocumented API names as plain text (`GetUSB...`); `usb.js` builds those names at runtime.
-- `readDir` returns folders as `name/` and includes `./` and `../`.
-- Script files must be ASCII-only (use `\uXXXX`), the TV may decode them with the wrong charset; the test enforces this.
-- Avoid `opacity` on many absolutely positioned elements and separate full-screen backdrop layers; they misstack on this browser.
-- The TV caches widgets by id, hence the stamped id.
-
-## Constraints
-
-Orsay's browser is old WebKit: ES5 only (no `let`/`const`, arrows, template literals), no flexbox, partial CSS3. Video draws on a plane behind the page; the page goes transparent (`body.playing`) during playback. Posters load only for visible rows +-1.
-
-## Tests
-
-```
-node test/scan.test.js
-node test/info.test.js
-node test/player.test.js
-python test/test_tmdb.py
-```
-
-None of them needs a TV, a key or the network. The player test runs the real `player.js` against a fake plugin and fake timers. GitHub Actions runs all four on every push (`.github/workflows/tests.yml`). They cannot tell how the old TV browser renders something; that still needs a look at the TV.
+**The TV and the install**
+- Developed on one TV (UE46F6500). Other models may report other screen sizes, lack some plugin calls, or not deliver the INFO key to widgets.
+- Resume positions are saved only when you leave after 1 minute and with more than 1 minute left. They live in a file on the TV, not on the drive.
+- Every `serve.py` start adds a new entry to More Apps; delete the old ones by hand.
+- The details text is cut at about 700 characters, and its language is the one used when it was downloaded.
+- The shelf's tint comes from the poster's average color when the TV allows reading it; otherwise a color picked from the title is used.
+- The TMDB scripts have been tried on a real drive, but their tests only use a fake TMDB.
 
 ## Troubleshooting
 
+Press **Blue** on the shelf to show the log. It is the first thing to look at, and it starts fresh every time the app starts.
+
 | Symptom | Cause and fix |
 |---|---|
-| The TV keeps showing an old version | It caches a widget by id. Restart `serve.py` (it stamps a new id), run App Sync again, open the newest entry, and compare the version next to the title with the one `serve.py` printed. Delete old entries from More Apps. |
-| Install fails with `UndocumentedAPI '...'` | The TV's installer found an API name it does not know in the page text. Build such names at runtime, as `usb.js` does. |
+| The TV keeps showing an old version | It remembers apps by id. Restart `serve.py` (new id), run App Sync again, open the newest entry, and compare the version next to the title with the one `serve.py` printed. |
+| Install fails with `UndocumentedAPI '...'` | The TV's installer found an API name it does not know in the page text. Names like that must be built at runtime, as `usb.js` does. |
 | Black screen, no keys | Check `config.xml` (Samsung format, `<type>user</type>`, 960x540). A page that never calls `sendReadyEvent` stays on "Loading". |
-| Tiles or text cut off at the right or bottom | The widget space is 960x540 whatever the browser reports. Press RED on the shelf for the calibration screen. |
-| "No USB drive found" | Plug it in (the shelf looks again every few seconds), or press GREEN. Mounts are probed at `/dtv/usb/sda1` and similar. |
-| "Folder Filma not found" | Create a folder named `Filma` on the drive (any capitalisation, up to 3 levels down) with one folder per movie. |
-| A movie has no poster | Add `poster.jpg`, or run the TMDB tools. Large or progressive JPEGs may fail on the TV; Pillow converts them to 300x450 baseline. |
-| INFO does nothing | Press BLUE for the log: `INFO key registered` should appear at start, and `Unhandled key N` shows what the remote sent. Without that line the TV does not deliver the key to widgets. |
-| INFO says "No details" | Run `tmdb_posters.py --apply` on the drive. The folder name needs `[tmdbid-N]`; `tmdb_tag.py` adds it. |
-| Subtitles look different from the TV player | BLUE log: `Subtitle font: loaded` or `NOT loaded`. They are drawn by the widget (Open Sans SemiBold), not by the TV. |
-| The picture is the wrong shape | The log shows `Video size WxH` and `Picture area`. GREEN while playing cycles Auto / 16:9 / 4:3 / 1.85:1 / 2.35:1 and remembers it per movie. |
+| Tiles or text cut off at the edge | The widget space is 960x540 whatever the browser reports. Press Red on the shelf for the calibration screen. |
+| "No USB drive found" | Plug it in (the shelf looks again every few seconds) or press Green. |
+| "Folder Filma not found" | Create a folder named `Filma` on the drive, with one folder per movie. |
+| A movie has no poster | Add `poster.jpg` or run the TMDB scripts. Very large or progressive JPEGs can fail on the TV; Pillow converts them to 300x450 baseline. |
+| INFO does nothing | In the log, `INFO key registered` should appear at start, and `Unhandled key N` shows what the remote sent. Without it the TV is not delivering the key. |
+| INFO says "No details" | Run `tmdb_posters.py --apply`. The folder name needs `[tmdbid-N]`; `tmdb_tag.py` adds it. |
+| Subtitles look different from the TV player | The log shows `Subtitle font: loaded` or `NOT loaded`. The widget draws them itself, not the TV. |
+| The picture is the wrong shape | The log shows `Video size WxH` and `Picture area`. Press Green while playing to pick another shape. |
 | `serve.py` says the port is in use | Another copy is still running. Stop it first. |
-| `tmdb_*.py`: "Set the TMDB_API_KEY" | Open a new terminal after setting it, or use `$env:TMDB_API_KEY = "..."` in the same window. |
-| `tmdb_*.py`: "TMDB rejected the key (HTTP 401)" | Wrong or copied-with-a-space key. The v3 key (32 characters) and the v4 token (`eyJ...`) both work. |
+| "Set the TMDB_API_KEY" | Open a new terminal after setting the key, or set it in the same window with `$env:TMDB_API_KEY = "..."`. |
+| "TMDB rejected the key (HTTP 401)" | The key is wrong or was copied with a space. |
 
-The BLUE log is the first thing to look at for anything else; it is cleared on every start of the widget.
+## For developers
 
-## Ideas
+### Project layout
+
+```
+widget/              the Orsay widget (config.xml, index.html, css/, fonts/, icon/, js/)
+  js/main.js         grid, focus, scanning states, details screen, key handling, calibration
+  js/usb.js          find the USB mount, walk folders, pick posters/backdrops/subtitles, clean titles, sort
+  js/player.js       playback, transport bar, picture shape, resume, subtitle clock
+  js/subs.js         SRT parser and loader
+  js/info.js         reads <video>.tmdb.json for the INFO screen
+  js/store.js        resume positions (FileSystem common file MovieShelf/resume.json)
+  js/log.js          on-screen log (Blue key)
+tools/serve.py       zips widget/, writes widgetlist.xml, serves it on port 80 for App Sync
+tools/tmdb_tag.py    adds [tmdbid-N] to folders (TMDB search, only certain matches, --undo)
+tools/tmdb_posters.py downloads posters, backdrops and details from TMDB by id
+tools/posters.py     shrinks existing posters to 300x450 (needs Pillow)
+tools/make_icons.py  regenerates widget/icon/*.png (no dependencies)
+test/                node and python tests (below)
+docs/screenshots/    the pictures in this README
+.github/workflows/   runs the tests on every push
+```
+
+`python tools/serve.py --stable-id` keeps the plain widget id instead of stamping a new one. The version shown on the shelf comes from `VERSION` in `js/main.js` and `<ver>` in `widget/config.xml`; a test makes sure they match.
+
+### Tests
+
+```
+node test/scan.test.js       scanning, titles, sorting, subtitles, backdrops, version match, ASCII-only scripts
+node test/info.test.js       the details file
+node test/player.test.js     playback logic against a fake TV plugin and fake timers
+python test/test_tmdb.py     both TMDB scripts against a fake TMDB
+```
+
+None of them needs a TV, a key or the network, and GitHub Actions runs all four on every push. They cannot tell how the old TV browser draws something; that still needs a look at the TV.
+
+### What the TV taught us
+
+Orsay's browser is old WebKit: ES5 only (no `let`/`const`, arrow functions or template literals), no flexbox, partial CSS3.
+
+- Widgets are laid out in a **960x540** space. `window.innerWidth` reports whatever `config.xml` declares, so it is logged but not trusted.
+- The TV's installer rejects pages that contain undocumented API names as plain text (`GetUSB...`), so `usb.js` builds those names at runtime.
+- `readDir` returns folders as `name/` and includes `./` and `../`.
+- Script files must be ASCII-only (write non-ASCII characters as unicode escapes, backslash-u plus four digits), because the TV may decode them with the wrong charset. A test enforces it.
+- Avoid `opacity` on many absolutely positioned elements and separate full-screen backdrop layers: they stack wrongly on this browser. The shelf backdrop is therefore the shelf's own CSS background.
+- Video plays on a plane behind the page, so the page goes transparent (`body.playing`) during playback. The TV stretches the picture to the area it is given, so the area must have the video's shape.
+- The TV keeps a cached copy of a widget per id, hence the stamped id.
+- The INFO key reaches a widget only after `registKey`.
+
+### Ideas
 
 A "continue watching" row, other subtitle formats, subtitle sync adjustment, collections (folders of related movies) as one tile.
 
-The bundled subtitle font is Open Sans SemiBold (SIL Open Font License, `widget/fonts/OpenSans-OFL.txt`).
+## License
+
+MIT, see `LICENSE`. The bundled subtitle font is Open Sans SemiBold under the SIL Open Font License (`widget/fonts/OpenSans-OFL.txt`). Poster, backdrop and plot data come from TMDB (https://www.themoviedb.org); this project is not endorsed or certified by TMDB.

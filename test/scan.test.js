@@ -139,7 +139,6 @@ assert.deepEqual(found, ['/dtv/usb/sda1']);
 var bare = Usb.findRoots(null, function (p) { return p === '/dtv/usb/sda' ? [] : null; });
 assert.deepEqual(bare, ['/dtv/usb/sda']);
 
-console.log('scan.test.js: all passed (' + movies.length + ' movies)');
 
 // backdrops and details files from tools/tmdb_posters.py
 var side = {
@@ -173,3 +172,27 @@ var cfgVer = /<ver[^>]*>([^<]+)<\/ver>/.exec(cfgText);
 var mainVer = /var VERSION = '([^']+)'/.exec(mainText);
 assert.ok(cfgVer && mainVer, 'could not find the version in config.xml or main.js');
 assert.equal(mainVer[1], cfgVer[1].trim(), 'VERSION in main.js and <ver> in config.xml differ');
+
+// Jellyfin's file names: backdrop.jpg / fanart.jpg / background.jpg; other artwork must not become a poster
+var jf = {
+	'/dtv/usb/sda1': [dir('Filma')],
+	'/dtv/usb/sda1/Filma': [dir('A'), dir('B'), dir('C'), dir('D'), dir('E')],
+	'/dtv/usb/sda1/Filma/A': [file('a.mp4'), file('poster.jpg'), file('backdrop.jpg'), file('fanart.jpg'), file('logo.png'), file('banner.jpg')],
+	'/dtv/usb/sda1/Filma/B': [file('b.mp4'), file('fanart.jpg'), file('background.jpg')],
+	'/dtv/usb/sda1/Filma/C': [file('c.mp4'), file('logo.png'), file('thumb.jpg'), file('landscape.jpg')],
+	'/dtv/usb/sda1/Filma/D': [file('d.mp4'), file('d.backdrop.jpg'), file('backdrop.jpg')],
+	'/dtv/usb/sda1/Filma/E': [file('e1.mp4'), file('e2.mp4'), file('backdrop.jpg'), file('e2-fanart.jpg'), file('e1.backdrop.jpg')]
+};
+var jfBy = {};
+Usb.scan(function (p) { return jf[p] || null; }, ['/dtv/usb/sda1'], true).forEach(function (m) { jfBy[m.path.split('/').pop()] = m; });
+assert.equal(jfBy['a.mp4'].poster, '/dtv/usb/sda1/Filma/A/poster.jpg');
+assert.equal(jfBy['a.mp4'].backdrop, '/dtv/usb/sda1/Filma/A/backdrop.jpg', 'backdrop.jpg comes before fanart.jpg');
+assert.equal(jfBy['b.mp4'].backdrop, '/dtv/usb/sda1/Filma/B/fanart.jpg');
+assert.equal(jfBy['b.mp4'].poster, null, 'fanart and background are not posters');
+assert.equal(jfBy['c.mp4'].poster, null, 'logo, thumb and landscape are not posters');
+assert.equal(jfBy['c.mp4'].backdrop, null);
+assert.equal(jfBy['d.mp4'].backdrop, '/dtv/usb/sda1/Filma/D/d.backdrop.jpg', 'the video-named backdrop wins');
+assert.equal(jfBy['e1.mp4'].backdrop, '/dtv/usb/sda1/Filma/E/e1.backdrop.jpg');
+assert.equal(jfBy['e2.mp4'].backdrop, '/dtv/usb/sda1/Filma/E/e2-fanart.jpg', 'several videos: a shared backdrop.jpg is not assigned');
+
+console.log('scan.test.js: all passed (' + movies.length + ' movies)');

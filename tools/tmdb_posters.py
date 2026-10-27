@@ -4,10 +4,13 @@ Only movie folders whose name carries the TMDB id are processed (Jellyfin style)
   "Heat (1995) [tmdbid-949]"   (also {tmdb-949} and tmdbid=949)
 Folders without an id are ignored. Files that already exist are never replaced.
 
-Per movie, next to the video (named after it, B = the video's name without extension):
-  poster.jpg            the poster (several videos in one folder: B.jpg)
-  B.backdrop.jpg        a 16:9 backdrop picture, used as the shelf and info-screen background
-  B.tmdb.json           title, year, rating, runtime, genres, overview (shown with INFO on the TV)
+Per movie, in the movie's folder, named the way Jellyfin names them:
+  poster.jpg            the poster
+  backdrop.jpg          a 16:9 backdrop picture, used as the shelf and info-screen background
+  <video>.tmdb.json     title, year, rating, runtime, genres, overview (shown with INFO on the TV)
+A folder holding several videos names the pictures after each video instead: <video>.jpg and
+<video>.backdrop.jpg. Jellyfin's own fanart.jpg and background.jpg count as an existing backdrop, and a
+<video>.backdrop.jpg from an earlier version is renamed to backdrop.jpg.
 
   python tools/tmdb_posters.py E:\                 dry run: lists what would be downloaded (no key, no network)
   python tools/tmdb_posters.py E:\ --apply         downloads (needs a TMDB key)
@@ -78,16 +81,26 @@ def base(name):
     return os.path.splitext(name)[0]
 
 
+BACKDROP_NAMES = ("backdrop", "fanart", "background")       # what Jellyfin calls the backdrop picture
+
+
 class Movie:
-    def __init__(self, folder, video, target, poster_exists):
+    """One movie. `single`: it is the only video in its folder, so its pictures get Jellyfin's plain names
+    (poster.jpg, backdrop.jpg); otherwise they are named after the video."""
+
+    def __init__(self, folder, video, target, poster_exists, single=True):
         self.folder = folder
         self.video = video
+        self.single = single
         self.target = target                                   # where the poster goes
         stem = os.path.join(folder, base(video))
-        self.backdrop_target = stem + ".backdrop.jpg"
+        self.legacy_backdrop = stem + ".backdrop.jpg"          # the name earlier versions used
+        self.backdrop_target = os.path.join(folder, "backdrop.jpg") if single else self.legacy_backdrop
         self.info_target = stem + ".tmdb.json"
         self.poster_exists = poster_exists
-        self.backdrop_exists = os.path.isfile(self.backdrop_target)
+        self.legacy_exists = os.path.isfile(self.legacy_backdrop)
+        self.backdrop_exists = self.legacy_exists if not single else any(
+            os.path.isfile(os.path.join(folder, n + ext)) for n in BACKDROP_NAMES for ext in (".jpg", ".jpeg", ".png", ".JPG"))
         self.info_exists = os.path.isfile(self.info_target)
 
 
@@ -130,7 +143,7 @@ def find_movies(root):
         else:
             for v in videos:
                 has = any(base(i).lower() == base(v).lower() for i in images)
-                movies.append(Movie(path, v, os.path.join(path, base(v) + ".jpg"), has))
+                movies.append(Movie(path, v, os.path.join(path, base(v) + ".jpg"), has, single=False))
         if (len(videos) != 1 or top) and depth < MAX_DEPTH:
             for d in dirs:
                 walk(os.path.join(path, d), depth + 1, False)
@@ -228,13 +241,25 @@ def run(root, api, apply, extras=True, out=print):
     """Only folders whose name carries a TMDB id are touched; the rest are ignored. Existing files are
     never replaced. `api` may be None for a dry run. Returns a dict of counters."""
     stats = {"downloaded": 0, "backdrops": 0, "details": 0, "skipped": 0, "ignored": 0,
-             "no_poster": 0, "failed": 0, "shrunk": 0}
+             "no_poster": 0, "failed": 0, "shrunk": 0, "migrated": 0}
     for m in find_movies(root):
         tid = movie_id(m)
         if tid is None:
             stats["ignored"] += 1
             continue
         shown = "%s [tmdbid-%d]" % (clean_title(os.path.basename(m.folder))[0], tid)
+        if m.single and m.legacy_exists and not m.backdrop_exists:     # an earlier version's name: move it to Jellyfin's
+            if apply:
+                try:
+                    os.rename(m.legacy_backdrop, m.backdrop_target)
+                    stats["migrated"] += 1
+                    out("renamed %s -> backdrop.jpg" % os.path.basename(m.legacy_backdrop))
+                    m.backdrop_exists = True
+                except OSError as e:
+                    out("FAILED  %s: %s" % (shown, e))
+            else:
+                out("would rename %s -> backdrop.jpg in %s" % (os.path.basename(m.legacy_backdrop), m.folder))
+                m.backdrop_exists = True
         need = []
         if not m.poster_exists:
             need.append("poster")
@@ -309,7 +334,7 @@ def main():
     stats = run(root, api, args.apply, extras=not args.posters_only)
     if args.apply:
         print("done: %(downloaded)d posters, %(backdrops)d backdrops, %(details)d details files; %(skipped)d movies already complete, "
-              "%(ignored)d ignored (no id), %(no_poster)d without poster on TMDB, %(failed)d failed" % stats)
+              "%(migrated)d backdrops renamed, %(ignored)d ignored (no id), %(no_poster)d without poster on TMDB, %(failed)d failed" % stats)
         try:
             import PIL  # noqa: F401
         except ImportError:
