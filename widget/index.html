@@ -22,6 +22,7 @@ window.onerror = function (msg, url, line) {
 <script type="text/javascript" src="js/store.js"></script>
 <script type="text/javascript" src="js/usb.js"></script>
 <script type="text/javascript" src="js/subs.js"></script>
+<script type="text/javascript" src="js/info.js"></script>
 <script type="text/javascript" src="js/player.js"></script>
 <script type="text/javascript" src="js/main.js"></script>
 </head>
@@ -45,7 +46,16 @@ window.onerror = function (msg, url, line) {
 	<div id="grid"></div>
 	<div id="track"><div id="thumb"></div></div>
 	<div id="status"></div>
-	<div id="hint"><b>ENTER</b> play &nbsp; <b>ARROWS</b> move &nbsp; <b>YELLOW</b> next letter &nbsp; <b>RED</b> calibrate &nbsp; <b>GREEN</b> rescan &nbsp; <b>BLUE</b> log &nbsp; <b>RETURN</b> exit</div>
+	<div id="hint"><b>ENTER</b> play &nbsp; <b>ARROWS</b> move &nbsp; <b>INFO</b> details &nbsp; <b>YELLOW</b> next letter &nbsp; <b>RED</b> calibrate &nbsp; <b>GREEN</b> rescan &nbsp; <b>BLUE</b> log &nbsp; <b>RETURN</b> exit</div>
+</div>
+
+<div id="info">
+	<div id="infoPosterBox"><img id="infoPoster" alt=""></div>
+	<div id="infoTitle"></div>
+	<div id="infoTag"></div>
+	<div id="infoMeta"></div>
+	<div id="infoText"></div>
+	<div id="infoHint"><b>ENTER</b> play &nbsp; <b>LEFT / RIGHT</b> previous / next movie &nbsp; <b>RETURN</b> or <b>INFO</b> back</div>
 </div>
 
 <div id="sub"></div>

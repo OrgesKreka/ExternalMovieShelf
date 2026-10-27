@@ -140,3 +140,36 @@ var bare = Usb.findRoots(null, function (p) { return p === '/dtv/usb/sda' ? [] :
 assert.deepEqual(bare, ['/dtv/usb/sda']);
 
 console.log('scan.test.js: all passed (' + movies.length + ' movies)');
+
+// backdrops and details files from tools/tmdb_posters.py
+var side = {
+	'/dtv/usb/sda1': [dir('Filma')],
+	'/dtv/usb/sda1/Filma': [dir('Heat (1995) [tmdbid-949]'), dir('Only Backdrop'), dir('Pair')],
+	'/dtv/usb/sda1/Filma/Heat (1995) [tmdbid-949]': [file('heat.mp4'), file('poster.jpg'), file('heat.backdrop.jpg'), file('heat.tmdb.json')],
+	'/dtv/usb/sda1/Filma/Only Backdrop': [file('x.mp4'), file('x.backdrop.jpg')],
+	'/dtv/usb/sda1/Filma/Pair': [file('a.mp4'), file('b.mp4'), file('b.backdrop.jpg'), file('b.tmdb.json'), file('a.tmdb.json')]
+};
+var sideMovies = Usb.scan(function (p) { return side[p] || null; }, ['/dtv/usb/sda1'], true);
+var sideBy = {};
+sideMovies.forEach(function (m) { sideBy[m.path.split('/').pop()] = m; });
+var heat = sideBy['heat.mp4'];
+assert.equal(heat.poster, '/dtv/usb/sda1/Filma/Heat (1995) [tmdbid-949]/poster.jpg');
+assert.equal(heat.backdrop, '/dtv/usb/sda1/Filma/Heat (1995) [tmdbid-949]/heat.backdrop.jpg');
+assert.equal(heat.info, '/dtv/usb/sda1/Filma/Heat (1995) [tmdbid-949]/heat.tmdb.json');
+assert.equal(sideBy['x.mp4'].poster, null, 'a backdrop must never be used as the poster');
+assert.equal(sideBy['x.mp4'].backdrop, '/dtv/usb/sda1/Filma/Only Backdrop/x.backdrop.jpg');
+assert.equal(sideBy['x.mp4'].info, null);
+assert.equal(sideBy['a.mp4'].backdrop, null, 'several videos: only the file named after the video counts');
+assert.equal(sideBy['a.mp4'].info, '/dtv/usb/sda1/Filma/Pair/a.tmdb.json');
+assert.equal(sideBy['b.mp4'].backdrop, '/dtv/usb/sda1/Filma/Pair/b.backdrop.jpg');
+assert.equal(Usb.pickSide(['Only.tmdb.json'], 'renamed', '.tmdb.json', true), 'Only.tmdb.json');
+assert.equal(Usb.pickSide(['Only.tmdb.json'], 'renamed', '.tmdb.json', false), null);
+assert.equal(Usb.pickSide(['HEAT.TMDB.JSON'], 'heat', '.tmdb.json', false), 'HEAT.TMDB.JSON');
+
+// the version shown on the shelf must equal the one in config.xml (serve.py names the zip after config.xml)
+var cfgText = fs.readFileSync(path.join(__dirname, '..', 'widget', 'config.xml'), 'utf8');
+var mainText = fs.readFileSync(path.join(__dirname, '..', 'widget', 'js', 'main.js'), 'utf8');
+var cfgVer = /<ver[^>]*>([^<]+)<\/ver>/.exec(cfgText);
+var mainVer = /var VERSION = '([^']+)'/.exec(mainText);
+assert.ok(cfgVer && mainVer, 'could not find the version in config.xml or main.js');
+assert.equal(mainVer[1], cfgVer[1].trim(), 'VERSION in main.js and <ver> in config.xml differ');

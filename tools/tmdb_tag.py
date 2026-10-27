@@ -6,16 +6,23 @@ agrees. Anything less certain is listed with the candidates and left alone, so y
 by hand (the id is the number in themoviedb.org/movie/<id>-title). Folders that already have an id,
 and folders holding several videos, are not touched.
 
-  python tools/tmdb_tag.py E:\             dry run: shows the renames (needs the key, changes nothing)
-  python tools/tmdb_tag.py E:\ --apply     rename the folders
+  python tools/tmdb_tag.py E:\                  dry run: shows the renames (needs the key, changes nothing)
+  python tools/tmdb_tag.py E:\ --apply          rename the folders
+  python tools/tmdb_tag.py E:\ --undo           dry run of the undo: shows what would be renamed back
+  python tools/tmdb_tag.py E:\ --undo --apply   rename them back
+
+Every applied rename is appended to a hidden log, .tmdb_renames.log, inside the movie folder (Filma).
+--undo reads that log, puts the old names back, newest rename first, and then removes the log.
 
 The key comes from the TMDB_API_KEY environment variable (or --key), like tmdb_posters.py.
 Run tmdb_posters.py afterwards to download the posters.
 """
 import argparse
+import json
 import os
 import re
 import sys
+import time
 import urllib.error
 
 import tmdb_posters as tp
@@ -44,6 +51,17 @@ def choose(results, title, year):
 
 def candidates(results):
     return ", ".join("%s (%s) id %d" % (r.get("title"), year_of(r), r["id"]) for r in results[:3]) or "nothing found"
+
+
+LOG_NAME = ".tmdb_renames.log"
+
+
+def log_path(root):
+    return os.path.join(root, LOG_NAME)
+
+
+def rel(root, path):
+    return os.path.relpath(path, root).replace(os.sep, "/")
 
 
 def run(root, api, apply, out=print):
@@ -88,6 +106,8 @@ def run(root, api, apply, out=print):
         else:
             try:
                 os.rename(m.folder, new)
+                with open(log_path(root), "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "old": rel(root, m.folder), "new": rel(root, new)}) + "\n")
                 stats["renamed"] += 1
                 out("renamed  " + label)
             except OSError as e:
@@ -96,15 +116,58 @@ def run(root, api, apply, out=print):
     return stats
 
 
+def undo(root, apply, out=print):
+    """Puts back the folder names recorded in the log, newest first. Returns {'restored','skipped'}."""
+    stats = {"restored": 0, "skipped": 0}
+    path = log_path(root)
+    if not os.path.isfile(path):
+        out("Nothing to undo: no %s in %s" % (LOG_NAME, root))
+        return stats
+    with open(path, encoding="utf-8") as f:
+        entries = [json.loads(line) for line in f if line.strip()]
+    for e in reversed(entries):
+        old, new = os.path.join(root, *e["old"].split("/")), os.path.join(root, *e["new"].split("/"))
+        label = "%s -> %s" % (e["new"], e["old"])
+        if not os.path.isdir(new):
+            stats["skipped"] += 1
+            out("skipped  %s: the renamed folder is gone" % label)
+        elif os.path.exists(old):
+            stats["skipped"] += 1
+            out("skipped  %s: the old name is taken" % label)
+        elif not apply:
+            stats["restored"] += 1
+            out("would restore  " + label)
+        else:
+            try:
+                os.rename(new, old)
+                stats["restored"] += 1
+                out("restored  " + label)
+            except OSError as ex:
+                stats["skipped"] += 1
+                out("FAILED  %s: %s" % (label, ex))
+    if apply and not stats["skipped"]:
+        os.remove(path)
+    elif apply:
+        out("The log is kept because some entries were skipped.")
+    return stats
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", help="the drive or the Filma folder")
     ap.add_argument("--apply", action="store_true", help="rename the folders (default only shows what would change)")
+    ap.add_argument("--undo", action="store_true", help="put back the names recorded in the log (with --apply; otherwise a dry run)")
     ap.add_argument("--key", help="TMDB v3 key or v4 token (prefer the TMDB_API_KEY environment variable)")
     ap.add_argument("--language", default="en-US", help="search language, e.g. en-US or de-DE")
     args = ap.parse_args()
     if not os.path.isdir(args.root):
         sys.exit("Not a folder: " + args.root)
+    if args.undo:
+        s = undo(tp.find_movie_dir(args.root) or args.root, args.apply)
+        print("%d %s, %d skipped" % (s["restored"], "restored" if args.apply else "to restore", s["skipped"]))
+        if not args.apply:
+            print("Dry run. Add --apply to rename them back.")
+        return
     key = args.key or os.environ.get("TMDB_API_KEY")
     if not key:
         sys.exit("Set the TMDB_API_KEY environment variable (or pass --key). Free key: https://www.themoviedb.org/settings/api")

@@ -3,6 +3,8 @@ var Usb = (function () {
 	var VIDEO = /\.(mp4|m4v|mkv|avi|mov|wmv|ts|mpg|mpeg)$/i;
 	var IMAGE = /\.(jpe?g|png)$/i;
 	var SUB = /\.srt$/i;
+	var BACKDROP = /\.backdrop\.(jpe?g|png)$/i;   /* from tools/tmdb_posters.py; never a poster */
+	var INFO = /\.tmdb\.json$/i;
 	var MAX_DEPTH = 4;
 	var MOVIE_DIR = 'filma';
 	var SKIP_DIRS = /^(system volume information|lost\+found|recycler|\$recycle\.bin|@eadir|found\.\d+)$/i;
@@ -130,6 +132,15 @@ var Usb = (function () {
 		return single && sorted.length ? sorted[0] : null;
 	}
 
+	/* "<video base><suffix>" (e.g. ".tmdb.json"); a lone such file in a one-movie folder also counts. */
+	function pickSide(names, base, suffix, single) {
+		var i, want = (base + suffix).toLowerCase();
+		for (i = 0; i < names.length; i++) {
+			if (names[i].toLowerCase() === want) { return names[i]; }
+		}
+		return single && names.length === 1 ? names[0] : null;
+	}
+
 	/* readDir(path) -> [{name, isDir}] or null. Returns movies sorted by title. */
 	function scan(readDir, roots, requireDir) {
 		var movies = [];
@@ -139,8 +150,8 @@ var Usb = (function () {
 
 		function walk(path, depth, isRoot) {
 			var entries = readDir(path);
-			var videos = [], images = [], dirs = [], subs = [];
-			var i, e, v, folderName, c, poster, base, sub;
+			var videos = [], images = [], dirs = [], subs = [], backdrops = [], infos = [];
+			var i, e, v, folderName, c, poster, base, sub, bd, inf;
 
 			if (!entries) { log('readDir failed: ' + path); return; }
 			walked++;
@@ -149,7 +160,9 @@ var Usb = (function () {
 				if (isHidden(e.name)) { continue; }
 				if (e.isDir) { dirs.push(e.name); }
 				else if (VIDEO.test(e.name)) { videos.push(e.name); }
+				else if (BACKDROP.test(e.name)) { backdrops.push(e.name); }
 				else if (IMAGE.test(e.name)) { images.push(e.name); }
+				else if (INFO.test(e.name)) { infos.push(e.name); }
 				else if (SUB.test(e.name)) { subs.push(e.name); }
 			}
 
@@ -161,11 +174,15 @@ var Usb = (function () {
 				c = cleanTitle(folderName);
 				poster = pickPoster(images, baseName(videos[0]), false);
 				sub = pickSub(subs, baseName(videos[0]), true);
+				bd = pickSide(backdrops, baseName(videos[0]), '.backdrop.jpg', true);
+				inf = pickSide(infos, baseName(videos[0]), '.tmdb.json', true);
 				movies.push({
 					title: c.title, year: c.year, folder: path,
 					path: join(path, videos[0]),
 					poster: poster ? join(path, poster) : null,
-					subs: sub ? join(path, sub) : null
+					subs: sub ? join(path, sub) : null,
+					backdrop: bd ? join(path, bd) : null,
+					info: inf ? join(path, inf) : null
 				});
 			} else {
 				for (v = 0; v < videos.length; v++) {
@@ -173,11 +190,15 @@ var Usb = (function () {
 					c = cleanTitle(base);
 					poster = pickPoster(images, base, true);
 					sub = pickSub(subs, base, false);
+					bd = pickSide(backdrops, base, '.backdrop.jpg', false);
+					inf = pickSide(infos, base, '.tmdb.json', false);
 					movies.push({
 						title: c.title, year: c.year, folder: path,
 						path: join(path, videos[v]),
 						poster: poster ? join(path, poster) : null,
-						subs: sub ? join(path, sub) : null
+						subs: sub ? join(path, sub) : null,
+						backdrop: bd ? join(path, bd) : null,
+						info: inf ? join(path, inf) : null
 					});
 				}
 			}
@@ -272,6 +293,7 @@ var Usb = (function () {
 		sortKey: sortKey,
 		pickPoster: pickPoster,
 		pickSub: pickSub,
+		pickSide: pickSide,
 		scan: scan,
 		makeReader: makeReader,
 		findRoots: findRoots

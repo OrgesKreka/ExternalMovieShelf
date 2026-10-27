@@ -7,7 +7,7 @@ try {
 	/* Common API missing: keep the stubs so the page still paints and the error shows in #boot. */
 	widgetAPI = { sendReadyEvent: function () {}, sendReturnEvent: function () {}, blockNavigation: function () {} };
 	tvKey = { KEY_LEFT: 4, KEY_RIGHT: 5, KEY_UP: 29460, KEY_DOWN: 29461, KEY_ENTER: 29443, KEY_PLAY: 71,
-		KEY_PAUSE: 74, KEY_STOP: 70, KEY_RW: 69, KEY_FF: 72, KEY_RED: 108, KEY_GREEN: 20, KEY_BLUE: 22, KEY_YELLOW: 21, KEY_RETURN: 88 };
+		KEY_PAUSE: 74, KEY_STOP: 70, KEY_RW: 69, KEY_FF: 72, KEY_RED: 108, KEY_GREEN: 20, KEY_BLUE: 22, KEY_YELLOW: 21, KEY_RETURN: 88, KEY_INFO: 31 };
 	window.bootErrors = (window.bootErrors || []).concat('Common API missing: ' + e);
 }
 
@@ -39,7 +39,7 @@ var Main = (function () {
 	   (1280x720 in the first builds) while actually displaying only the top-left 960x540, so scaling
 	   by the reported size made the page too big. The reported size is logged, not used. */
 	var BASE_W = 960, BASE_H = 540;
-	var VERSION = '0.1.19';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
+	var VERSION = '0.2.0';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
 
 	function fit() {
 		var w = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -92,7 +92,6 @@ var Main = (function () {
 		Log.add('Calibration shown; ' + lastFit);
 	}
 
-	/* Hand the volume keys back to the TV so it shows its own volume bar and mute icon. */
 	/* Logs whether the bundled subtitle font really loaded: a span set in it is wider than the same
 	   text in the plain monospace fallback only when the font file was applied. */
 	function checkFont() {
@@ -112,14 +111,21 @@ var Main = (function () {
 		}, 2500);
 	}
 
+	/* Hand the volume keys back to the TV so it shows its own volume bar and mute icon,
+	   and ask for the INFO key, which the TV only delivers to widgets that register it. */
 	function setupSound() {
+		var api;
 		try {
-			var api = new Common.API.Plugin();
+			api = new Common.API.Plugin();
 			api.unregistKey(tvKey.KEY_VOL_UP);
 			api.unregistKey(tvKey.KEY_VOL_DOWN);
 			api.unregistKey(tvKey.KEY_MUTE);
 			Log.add('Volume keys released to the TV');
 		} catch (e) { Log.add('Volume key setup failed: ' + e); }
+		try {
+			api.registKey(tvKey.KEY_INFO);
+			Log.add('INFO key registered');
+		} catch (e3) { Log.add('INFO key not registered: ' + e3); }
 		try { $('pluginNavi').SetBannerState(1); } catch (e2) { Log.add('SetBannerState failed: ' + e2); }
 	}
 
@@ -351,14 +357,101 @@ var Main = (function () {
 		}
 	}
 
-	/* Tints the backdrop with the selected movie: poster average if readable, else its placeholder color. */
+	/* The shelf's own background: a gradient in the movie's color and, when the movie has a backdrop
+	   picture, that picture under a translucent version of the gradient. It stays the element's own
+	   background (no extra layer: separate backdrop layers misstack on this browser). */
+	var shelfPic = '';       /* backdrop path currently painted */
+	var picTimer = null;
+	var PIC_DELAY = 150;     /* ms without key presses before a new backdrop is loaded */
+
+	function paintShelf(rgb, pic) {
+		var k = 0.62, r = Math.round(rgb[0] * k), g = Math.round(rgb[1] * k), b = Math.round(rgb[2] * k);
+		var st = $('shelf').style;
+		if (pic) {
+			st.backgroundImage = '-webkit-linear-gradient(top, rgba(' + r + ',' + g + ',' + b + ',0.78) 0%, rgba(11,14,20,0.94) 85%), url("file://' + encodeURI(pic) + '")';
+			st.webkitBackgroundSize = 'auto, 960px 540px';
+			st.backgroundRepeat = 'no-repeat';
+		} else {
+			st.backgroundImage = '-webkit-linear-gradient(top, rgb(' + r + ',' + g + ',' + b + ') 0%, #0b0e14 85%)';
+			st.webkitBackgroundSize = 'auto';
+		}
+	}
+
+	/* Tints the backdrop with the selected movie: poster average if readable, else its placeholder color.
+	   A movie with a backdrop picture gets it a moment after the selection settles. */
 	function tint() {
-		var c, rgb, k = 0.62;
-		if (!cells.length) { return; }
+		var c, rgb, want;
+		if (!cells.length) { shelfPic = ''; paintShelf([20, 26, 38], ''); return; }
 		c = cells[sel];
 		if (!c.rgb && !c.rgbTried && c.img && c.img.complete) { c.rgbTried = true; c.rgb = avgColor(c.img); }   /* tried once: a tainted canvas would throw on every key press */
 		rgb = c.rgb || PAL[hash(c.movie.title) % 8];
-		$('shelf').style.background = '-webkit-linear-gradient(top, rgb(' + Math.round(rgb[0] * k) + ',' + Math.round(rgb[1] * k) + ',' + Math.round(rgb[2] * k) + ') 0%, #0b0e14 85%)';
+		want = c.movie.backdrop || '';
+		if (picTimer) { clearTimeout(picTimer); picTimer = null; }
+		if (!want) { shelfPic = ''; }
+		paintShelf(rgb, shelfPic);                       /* the new color now, over the previous picture if any */
+		if (want && want !== shelfPic) {
+			picTimer = setTimeout(function () { picTimer = null; shelfPic = want; tint(); }, PIC_DELAY);
+		}
+	}
+
+	/* ---- details screen (INFO) ---- */
+	var infoOpen = false;
+	var MAX_TEXT = 700;
+
+	function setPicture(el, pic) {
+		el.style.backgroundImage = pic
+			? '-webkit-linear-gradient(top, rgba(8,10,16,0.80), rgba(8,10,16,0.95)), url("file://' + encodeURI(pic) + '")'
+			: 'none';
+		el.style.webkitBackgroundSize = pic ? 'auto, 960px 540px' : 'auto';
+		el.style.backgroundRepeat = 'no-repeat';
+	}
+
+	function renderInfo() {
+		var m = cells[sel].movie, d = m.details, img = $('infoPoster'), text, plain = m.title + (m.year ? ' (' + m.year + ')' : '');
+		setPicture($('info'), m.backdrop);
+		img.style.display = m.poster ? 'block' : 'none';
+		img.onerror = function () { img.style.display = 'none'; };
+		img.src = m.poster ? 'file://' + encodeURI(m.poster) : '';
+		$('infoTitle').innerText = d && d.title ? d.title : plain;
+		$('infoTag').innerText = d && d.tagline ? d.tagline : '';
+		$('infoMeta').innerText = d ? Info.meta(d) : (m.year || '');
+		if (d && d.overview) {
+			text = d.overview.length > MAX_TEXT ? d.overview.substring(0, MAX_TEXT).replace(/\s+\S*$/, '') + '...' : d.overview;
+		} else if (d === undefined) {
+			text = 'Loading...';
+		} else {
+			text = 'No details for this movie yet. Run tools/tmdb_posters.py on the drive (see the README).';
+		}
+		$('infoText').innerText = text;
+	}
+
+	/* Shows the selected movie; its details file is read once (m.details: undefined = not yet, null = none). */
+	function refreshInfo() {
+		var m = cells[sel].movie;
+		if (m.details === undefined) {
+			if (m.info) {
+				Info.load(m.info, function (d) {
+					m.details = d;
+					if (infoOpen && cells[sel].movie === m) { renderInfo(); }
+				});
+			} else {
+				m.details = null;
+			}
+		}
+		renderInfo();
+	}
+
+	function openInfo() {
+		if (!cells.length) { return; }
+		infoOpen = true;
+		$('info').style.display = 'block';
+		refreshInfo();
+	}
+
+	function closeInfo() {
+		infoOpen = false;
+		$('info').style.display = 'none';
+		$('infoPoster').src = '';
 	}
 
 	function select(i) {
@@ -396,6 +489,15 @@ var Main = (function () {
 			return;
 		}
 
+		if (infoOpen) {
+			if (code === tvKey.KEY_RETURN || code === tvKey.KEY_INFO) { closeInfo(); }
+			else if (code === tvKey.KEY_ENTER || code === tvKey.KEY_PLAY) { closeInfo(); Player.play(cells[sel].movie); }
+			else if (code === tvKey.KEY_LEFT) { select(sel > 0 ? sel - 1 : cells.length - 1); refreshInfo(); }
+			else if (code === tvKey.KEY_RIGHT) { select(sel < cells.length - 1 ? sel + 1 : 0); refreshInfo(); }
+			widgetAPI.blockNavigation(event);
+			return;
+		}
+
 		switch (code) {
 		case tvKey.KEY_LEFT:
 		case tvKey.KEY_RIGHT:
@@ -406,6 +508,9 @@ var Main = (function () {
 		case tvKey.KEY_ENTER:
 		case tvKey.KEY_PLAY:
 			if (cells.length) { Player.play(cells[sel].movie); }
+			break;
+		case tvKey.KEY_INFO:
+			openInfo();
 			break;
 		case tvKey.KEY_RED:
 			calibrate();
@@ -422,6 +527,8 @@ var Main = (function () {
 		case tvKey.KEY_RETURN:
 			widgetAPI.sendReturnEvent();
 			break;
+		default:
+			Log.add('Unhandled key ' + code);   /* shows which code a remote key sends, e.g. if INFO never arrives */
 		}
 	}
 

@@ -1,17 +1,22 @@
-r"""Download movie posters from TMDB into the movie folders, as poster.jpg.
+r"""Download posters, backdrops and details from TMDB into the movie folders.
 
 Only movie folders whose name carries the TMDB id are processed (Jellyfin style):
   "Heat (1995) [tmdbid-949]"   (also {tmdb-949} and tmdbid=949)
-Folders without an id are ignored. A poster that already exists is never replaced.
-A folder with several videos gets <video name>.jpg per video instead (the widget needs that).
+Folders without an id are ignored. Files that already exist are never replaced.
+
+Per movie, next to the video (named after it, B = the video's name without extension):
+  poster.jpg            the poster (several videos in one folder: B.jpg)
+  B.backdrop.jpg        a 16:9 backdrop picture, used as the shelf and info-screen background
+  B.tmdb.json           title, year, rating, runtime, genres, overview (shown with INFO on the TV)
 
   python tools/tmdb_posters.py E:\                 dry run: lists what would be downloaded (no key, no network)
   python tools/tmdb_posters.py E:\ --apply         downloads (needs a TMDB key)
+  python tools/tmdb_posters.py E:\ --apply --posters-only
 
 The key is read from the TMDB_API_KEY environment variable (or --key). Either a v3 API key (32 hex
 characters) or a v4 read access token (starts with "eyJ") works; get one free at
-https://www.themoviedb.org/settings/api. Posters are saved as 300x450 baseline JPEG when Pillow is
-installed (pip install pillow), otherwise exactly as TMDB delivers them.
+https://www.themoviedb.org/settings/api. Images are shrunk (poster 300x450, backdrop 640x360,
+baseline JPEG) when Pillow is installed (pip install pillow), otherwise saved as TMDB delivers them.
 Uses only the Python standard library otherwise.
 """
 import argparse
@@ -32,7 +37,9 @@ MOVIE_DIR = "filma"
 MAX_DEPTH = 4
 API = "https://api.themoviedb.org/3"
 IMG = "https://image.tmdb.org/t/p/"
-W, H = 300, 450
+POSTER_SIZE = (300, 450)
+BACKDROP_SIZE = (640, 360)
+MAX_OVERVIEW = 1200
 
 ID_RE = re.compile(r"[\[\{(]\s*tmdb(?:id)?\s*[-=:]\s*(\d+)\s*[\]\})]|\btmdbid\s*=\s*(\d+)", re.I)
 TAG_RE = re.compile(r"[\[\{(]\s*(?:tmdb|imdb|tvdb)(?:id)?\s*[-=:]\s*[a-z0-9]+\s*[\]\})]", re.I)
@@ -72,12 +79,16 @@ def base(name):
 
 
 class Movie:
-    def __init__(self, folder, video, target, label, existing):
+    def __init__(self, folder, video, target, poster_exists):
         self.folder = folder
         self.video = video
-        self.target = target       # where the poster goes
-        self.label = label         # name the title/id are read from
-        self.existing = existing   # a poster is already there
+        self.target = target                                   # where the poster goes
+        stem = os.path.join(folder, base(video))
+        self.backdrop_target = stem + ".backdrop.jpg"
+        self.info_target = stem + ".tmdb.json"
+        self.poster_exists = poster_exists
+        self.backdrop_exists = os.path.isfile(self.backdrop_target)
+        self.info_exists = os.path.isfile(self.info_target)
 
 
 def find_movie_dir(root):
@@ -115,11 +126,11 @@ def find_movies(root):
         if len(videos) == 1 and not top:
             v = videos[0]
             has = any(base(i).lower() in POSTER_NAMES or base(i).lower() == base(v).lower() for i in images)
-            movies.append(Movie(path, v, os.path.join(path, "poster.jpg"), os.path.basename(path), has))
+            movies.append(Movie(path, v, os.path.join(path, "poster.jpg"), has))
         else:
             for v in videos:
                 has = any(base(i).lower() == base(v).lower() for i in images)
-                movies.append(Movie(path, v, os.path.join(path, base(v) + ".jpg"), base(v), has))
+                movies.append(Movie(path, v, os.path.join(path, base(v) + ".jpg"), has))
         if (len(videos) != 1 or top) and depth < MAX_DEPTH:
             for d in dirs:
                 walk(os.path.join(path, d), depth + 1, False)
@@ -134,10 +145,11 @@ def movie_id(m):
 
 
 class Tmdb:
-    def __init__(self, key, language="en-US", size="w342", pause=0.05):
+    def __init__(self, key, language="en-US", size="w342", backdrop_size="w780", pause=0.05):
         self.key = key
         self.language = language
         self.size = size
+        self.backdrop_size = backdrop_size
         self.pause = pause
 
     def _request(self, url, headers):
@@ -164,9 +176,9 @@ class Tmdb:
         time.sleep(self.pause)
         return json.loads(self._request(API + path + "?" + urllib.parse.urlencode(params), headers))
 
-    def poster_path(self, tmdb_id):
-        info = self.get_json("/movie/%d" % tmdb_id)
-        return info.get("poster_path"), info.get("title") or "", (info.get("release_date") or "")[:4]
+    def movie(self, tmdb_id):
+        """Everything the scripts need about a movie, in one request."""
+        return self.get_json("/movie/%d" % tmdb_id)
 
     def search(self, title, year=""):
         """Top search results for a title (and release year when given)."""
@@ -175,52 +187,91 @@ class Tmdb:
             params["year"] = year
         return self.get_json("/search/movie", params).get("results") or []
 
-    def image(self, poster_path):
+    def image(self, image_path, kind="poster"):
         time.sleep(self.pause)
-        return self._request(IMG + self.size + poster_path, {})
+        size = self.backdrop_size if kind == "backdrop" else self.size
+        return self._request(IMG + size + image_path, {})
 
 
-def to_jpeg(data):
-    """300x450 baseline JPEG when Pillow is available (the TV is picky and short on memory)."""
+def to_jpeg(data, size=POSTER_SIZE):
+    """Baseline JPEG of the given size when Pillow is available (the TV is picky and short on memory)."""
     try:
         from PIL import Image, ImageOps
     except ImportError:
         return data, False
     with Image.open(io.BytesIO(data)) as im:
-        out = ImageOps.fit(im.convert("RGB"), (W, H), Image.LANCZOS)
+        out = ImageOps.fit(im.convert("RGB"), size, Image.LANCZOS)
     buf = io.BytesIO()
     out.save(buf, "JPEG", quality=85, optimize=True, progressive=False)
     return buf.getvalue(), True
 
 
-def run(root, api, apply, out=print):
-    """Only folders whose name carries a TMDB id are touched; the rest are ignored.
-    A poster that is already there is never replaced. `api` may be None for a dry run."""
-    stats = {"downloaded": 0, "skipped": 0, "ignored": 0, "no_poster": 0, "failed": 0, "shrunk": 0}
+def make_details(info):
+    """The small JSON the widget shows. ASCII-only (\\uXXXX escapes): the TV may misread other charsets."""
+    overview = (info.get("overview") or "").strip()
+    if len(overview) > MAX_OVERVIEW:
+        overview = overview[:MAX_OVERVIEW].rsplit(" ", 1)[0] + "..."
+    details = {
+        "id": info.get("id"),
+        "title": info.get("title") or "",
+        "year": (info.get("release_date") or "")[:4],
+        "tagline": (info.get("tagline") or "").strip(),
+        "rating": round(float(info.get("vote_average") or 0), 1),
+        "runtime": int(info.get("runtime") or 0),
+        "genres": [g.get("name") for g in info.get("genres") or [] if g.get("name")],
+        "overview": overview,
+    }
+    return json.dumps(details, ensure_ascii=True, indent=1)
+
+
+def run(root, api, apply, extras=True, out=print):
+    """Only folders whose name carries a TMDB id are touched; the rest are ignored. Existing files are
+    never replaced. `api` may be None for a dry run. Returns a dict of counters."""
+    stats = {"downloaded": 0, "backdrops": 0, "details": 0, "skipped": 0, "ignored": 0,
+             "no_poster": 0, "failed": 0, "shrunk": 0}
     for m in find_movies(root):
         tid = movie_id(m)
         if tid is None:
             stats["ignored"] += 1
             continue
-        shown = "%s [tmdbid-%d]" % (clean_title(m.label)[0], tid)
-        if m.existing:
+        shown = "%s [tmdbid-%d]" % (clean_title(os.path.basename(m.folder))[0], tid)
+        need = []
+        if not m.poster_exists:
+            need.append("poster")
+        if extras and not m.backdrop_exists:
+            need.append("backdrop")
+        if extras and not m.info_exists:
+            need.append("details")
+        if not need:
             stats["skipped"] += 1
             continue
         if not apply:
-            out("would download: %s -> %s" % (shown, m.target))
+            out("would download: %s (%s) -> %s" % (shown, ", ".join(need), m.folder))
             continue
         try:
-            path, tmdb_title, _ = api.poster_path(tid)
-            if not path:
-                stats["no_poster"] += 1
-                out("no poster on TMDB: %s" % shown)
-                continue
-            data, shrunk = to_jpeg(api.image(path))
-            with open(m.target, "wb") as f:
-                f.write(data)
-            stats["downloaded"] += 1
-            stats["shrunk"] += 1 if shrunk else 0
-            out("saved   %s  <- %s" % (m.target, tmdb_title))
+            info = api.movie(tid)
+            if "poster" in need:
+                if info.get("poster_path"):
+                    data, shrunk = to_jpeg(api.image(info["poster_path"]))
+                    with open(m.target, "wb") as f:
+                        f.write(data)
+                    stats["downloaded"] += 1
+                    stats["shrunk"] += 1 if shrunk else 0
+                    out("saved   %s  <- %s" % (m.target, info.get("title") or shown))
+                else:
+                    stats["no_poster"] += 1
+                    out("no poster on TMDB: %s" % shown)
+            if "backdrop" in need and info.get("backdrop_path"):
+                data, _ = to_jpeg(api.image(info["backdrop_path"], "backdrop"), BACKDROP_SIZE)
+                with open(m.backdrop_target, "wb") as f:
+                    f.write(data)
+                stats["backdrops"] += 1
+                out("saved   %s" % m.backdrop_target)
+            if "details" in need:
+                with open(m.info_target, "w", encoding="ascii") as f:
+                    f.write(make_details(info))
+                stats["details"] += 1
+                out("saved   %s" % m.info_target)
         except urllib.error.HTTPError as e:
             if e.code in (401, 403):
                 out("TMDB rejected the key (HTTP %d). Check TMDB_API_KEY." % e.code)
@@ -237,9 +288,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", help="the drive or the Filma folder")
     ap.add_argument("--apply", action="store_true", help="download (default is a dry run without network)")
+    ap.add_argument("--posters-only", action="store_true", help="skip the backdrops and the details files")
     ap.add_argument("--key", help="TMDB v3 key or v4 token (prefer the TMDB_API_KEY environment variable)")
-    ap.add_argument("--size", default="w342", help="TMDB image size: w185, w342 (default), w500, original")
-    ap.add_argument("--language", default="en-US", help="poster language, e.g. en-US or de-DE")
+    ap.add_argument("--size", default="w342", help="TMDB poster size: w185, w342 (default), w500, original")
+    ap.add_argument("--language", default="en-US", help="language of the details, e.g. en-US or de-DE")
     args = ap.parse_args()
 
     root = args.root
@@ -254,14 +306,14 @@ def main():
         if not key:
             sys.exit("Set the TMDB_API_KEY environment variable (or pass --key). Free key: https://www.themoviedb.org/settings/api")
         api = Tmdb(key.strip(), args.language, args.size)
-    stats = run(root, api, args.apply)
+    stats = run(root, api, args.apply, extras=not args.posters_only)
     if args.apply:
-        print("done: %(downloaded)d downloaded, %(skipped)d already had a poster, %(ignored)d ignored (no id), "
-              "%(no_poster)d without poster on TMDB, %(failed)d failed" % stats)
+        print("done: %(downloaded)d posters, %(backdrops)d backdrops, %(details)d details files; %(skipped)d movies already complete, "
+              "%(ignored)d ignored (no id), %(no_poster)d without poster on TMDB, %(failed)d failed" % stats)
         try:
             import PIL  # noqa: F401
         except ImportError:
-            print("Pillow is not installed: posters were saved as delivered (342x513). pip install pillow to shrink them to 300x450.")
+            print("Pillow is not installed: images were saved as delivered. pip install pillow to shrink them for the TV.")
     else:
         print("Dry run. Add --apply to download.")
 

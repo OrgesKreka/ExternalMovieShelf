@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Widget scripts parse
+        run: for f in widget/js/*.js; do node --check "$f"; done
+      - name: Scanning, titles, sorting, subtitles, version, ASCII-only scripts
+        run: node test/scan.test.js
+      - name: Details file
+        run: node test/info.test.js
+      - name: Player logic
+        run: node test/player.test.js
+      - name: TMDB scripts (offline, fake API)
+        run: python -W error test/test_tmdb.py
+      - name: Tools compile
+        run: python -m py_compile tools/*.py

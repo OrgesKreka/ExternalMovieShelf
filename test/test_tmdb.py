@@ -1,4 +1,5 @@
 """Offline tests for tools/tmdb_posters.py (no network, no key). Run: python test/test_tmdb.py"""
+import json
 import os
 import sys
 import tempfile
@@ -12,12 +13,16 @@ import tmdb_tag as tag  # noqa: E402
 class FakeApi:
     def __init__(self):
         self.asked = []
+        self.images = []
 
-    def poster_path(self, tid):
+    def movie(self, tid):
         self.asked.append(tid)
-        return ("/p%d.jpg" % tid if tid != 7 else None), "Title %d" % tid, "1999"
+        return {"id": tid, "title": "Title %d é" % tid, "release_date": "1999-03-31", "vote_average": 8.2345,
+                "runtime": 136, "genres": [{"name": "Action"}, {"name": "Sci-Fi"}], "overview": "Plot of %d." % tid,
+                "poster_path": "/p%d.jpg" % tid if tid != 7 else None, "backdrop_path": "/b%d.jpg" % tid}
 
-    def image(self, path):
+    def image(self, path, kind="poster"):
+        self.images.append((kind, path))
         return b"JPEGDATA" + path.encode()
 
 
@@ -52,7 +57,7 @@ class ParseTests(unittest.TestCase):
 class RunTests(unittest.TestCase):
     def setUp(self):
         self._to_jpeg = t.to_jpeg
-        t.to_jpeg = lambda data: (data, False)    # the fake bytes are not an image; keep Pillow out of it
+        t.to_jpeg = lambda data, size=None: (data, False)    # the fake bytes are not an image; keep Pillow out of it
         self.addCleanup(setattr, t, "to_jpeg", self._to_jpeg)
         self.dir = tempfile.mkdtemp()
         make(self.dir, {
@@ -95,9 +100,43 @@ class RunTests(unittest.TestCase):
         self.assertEqual(slurp(self.poster("Has Poster [tmdbid-5]"), "r"), "old")   # never replaced
         self.assertFalse(os.path.exists(self.poster("Nopic [tmdbid-7]")))           # none on TMDB
         self.assertFalse(os.path.exists(self.poster("No Id (2001)")))               # ignored
-        self.assertEqual(sorted(api.asked), [7, 949])                               # nothing asked for the rest
-        self.assertEqual((stats["downloaded"], stats["no_poster"], stats["skipped"], stats["ignored"]), (1, 1, 1, 3))
+        self.assertEqual(sorted(api.asked), [5, 7, 949])                            # one request per folder with an id
+        self.assertEqual((stats["downloaded"], stats["no_poster"], stats["ignored"]), (1, 1, 3))
         self.assertFalse(any("No Id" in l for l in lines))                          # no noise for ignored ones
+
+    def test_backdrop_and_details(self):
+        api = FakeApi()
+        stats = t.run(self.root, api, True, out=lambda l: None)
+        folder = os.path.join(self.dir, "Filma", "Heat (1995) [tmdbid-949]")
+        self.assertTrue(slurp(os.path.join(folder, "heat.backdrop.jpg")).startswith(b"JPEGDATA/b949.jpg"))
+        self.assertIn(("backdrop", "/b949.jpg"), api.images)
+        raw = slurp(os.path.join(folder, "heat.tmdb.json"), "r")
+        raw.encode("ascii")                                                         # ASCII-only file
+        info = json.loads(raw)
+        self.assertEqual((info["id"], info["year"], info["rating"], info["runtime"]), (949, "1999", 8.2, 136))
+        self.assertEqual(info["genres"], ["Action", "Sci-Fi"])
+        self.assertEqual(info["title"], "Title 949 é")                      # escaped in the file, decoded by JSON
+        self.assertIn("\\u00e9", raw)
+        # the folder that already had a poster still gets its missing backdrop and details
+        self.assertTrue(os.path.isfile(os.path.join(self.dir, "Filma", "Has Poster [tmdbid-5]", "h.backdrop.jpg")))
+        self.assertEqual(slurp(self.poster("Has Poster [tmdbid-5]"), "r"), "old")
+        self.assertEqual((stats["backdrops"], stats["details"]), (3, 3))
+
+    def test_second_run_downloads_nothing(self):
+        t.run(self.root, FakeApi(), True, out=lambda l: None)
+        api = FakeApi()
+        stats = t.run(self.root, api, True, out=lambda l: None)
+        self.assertEqual(api.asked, [7])        # Nopic has no poster on TMDB, so it is asked again; the rest is complete
+        self.assertEqual(stats["downloaded"] + stats["backdrops"] + stats["details"], 0)
+
+    def test_posters_only(self):
+        api = FakeApi()
+        t.run(self.root, api, True, extras=False, out=lambda l: None)
+        folder = os.path.join(self.dir, "Filma", "Heat (1995) [tmdbid-949]")
+        self.assertTrue(os.path.isfile(os.path.join(folder, "poster.jpg")))
+        self.assertFalse(os.path.exists(os.path.join(folder, "heat.backdrop.jpg")))
+        self.assertFalse(os.path.exists(os.path.join(folder, "heat.tmdb.json")))
+        self.assertEqual(sorted(api.asked), [7, 949])      # Has Poster is already complete in this mode
 
 
 class TagApi:
@@ -146,6 +185,32 @@ class TagTests(unittest.TestCase):
         self.assertIn("Done [tmdbid-1]", n)
         self.assertIn("Many", n)
         self.assertEqual(s["renamed"], 3)
+
+    def test_undo_restores_names_and_removes_the_log(self):
+        before = self.names()
+        tag.run(self.root, TagApi(), True, out=lambda l: None)
+        log = os.path.join(self.root, ".tmdb_renames.log")
+        self.assertTrue(os.path.isfile(log))
+        s = tag.undo(self.root, False, out=lambda l: None)           # dry run: nothing changes
+        self.assertEqual(s["restored"], 3)
+        self.assertIn("Rope [tmdbid-12]", self.names())
+        s = tag.undo(self.root, True, out=lambda l: None)
+        self.assertEqual((s["restored"], s["skipped"]), (3, 0))
+        self.assertEqual(self.names(), before)
+        self.assertFalse(os.path.exists(log))
+
+    def test_undo_skips_when_the_old_name_is_taken_and_keeps_the_log(self):
+        tag.run(self.root, TagApi(), True, out=lambda l: None)
+        os.makedirs(os.path.join(self.root, "Rope"))                  # someone made a folder with the old name
+        s = tag.undo(self.root, True, out=lambda l: None)
+        self.assertEqual((s["restored"], s["skipped"]), (2, 1))
+        self.assertIn("Rope [tmdbid-12]", self.names())
+        self.assertTrue(os.path.isfile(os.path.join(self.root, ".tmdb_renames.log")))
+
+    def test_undo_without_a_log(self):
+        lines = []
+        self.assertEqual(tag.undo(self.root, True, out=lines.append), {"restored": 0, "skipped": 0})
+        self.assertTrue(any("Nothing to undo" in l for l in lines))
 
 
 if __name__ == "__main__":

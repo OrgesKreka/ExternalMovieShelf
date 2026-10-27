@@ -87,6 +87,22 @@ body.playing #shelf { display: none; }
 #hint { position: absolute; left: 36px; top: 514px; width: 888px; font-size: 11px; color: #5f6b7c; }
 #hint b { color: #c3ccd9; }
 
+/* Details screen (INFO on the shelf). Its own background carries the movie's backdrop, set by Main. */
+#info { display: none; position: absolute; left: 0px; top: 0px; width: 960px; height: 540px; background: #0b0e14; }
+body.playing #info { display: none; }
+#infoPosterBox {
+	position: absolute; left: 48px; top: 70px; width: 200px; height: 300px;
+	-webkit-box-sizing: border-box; box-sizing: border-box; border: 3px solid #ffb400; background: #1d2433; overflow: hidden;
+	-webkit-border-radius: 8px; border-radius: 8px;
+}
+#infoPoster { position: absolute; left: 0px; top: 0px; width: 194px; height: 294px; }
+#infoTitle { position: absolute; left: 284px; top: 62px; width: 640px; height: 40px; font-size: 30px; line-height: 40px; font-weight: bold; overflow: hidden; white-space: nowrap; color: #ffffff; }
+#infoTag { position: absolute; left: 284px; top: 104px; width: 640px; height: 20px; font-size: 15px; font-style: italic; overflow: hidden; white-space: nowrap; color: #c3ccd9; }
+#infoMeta { position: absolute; left: 284px; top: 132px; width: 640px; height: 22px; font-size: 15px; overflow: hidden; white-space: nowrap; color: #ffb400; }
+#infoText { position: absolute; left: 284px; top: 170px; width: 636px; height: 275px; font-size: 17px; line-height: 25px; overflow: hidden; color: #e8ecf1; }
+#infoHint { position: absolute; left: 48px; top: 496px; width: 860px; font-size: 12px; color: #8a96a8; }
+#infoHint b { color: #c3ccd9; }
+
 /* Open Sans SemiBold (SIL OFL, see fonts/OpenSans-OFL.txt), bundled for subtitles only. */
 @font-face { font-family: 'SubFont'; src: url('../fonts/open-sans-latin-600-normal.woff') format('woff'); font-weight: normal; font-style: normal; }
 
