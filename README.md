@@ -124,7 +124,7 @@ Playback and subtitles
 - Only `.srt` subtitles are read (no `.sub`, `.ass`, `.vtt`). Files are decoded as UTF-8, else Windows-1252; other encodings (UTF-16, Windows-1250 letters such as s-cedilla) can show wrong characters.
 - Subtitles are drawn by the widget, not by the TV, and follow the player's 1 s time callback smoothed to about 0.2 s, so they can drift by a fraction of a second. There is no subtitle sync adjustment and no choice between several subtitle files.
 - The bundled subtitle font covers Western European letters only.
-- The picture is fitted to the video's pixel size. Videos with non-square pixels (some DVD rips) report a size that differs from their true shape, so they may look slightly stretched; the TV's own player corrects for that.
+- The picture is fitted to the video's pixel size (checked on a UE46F6500 with a 4:3 movie and a 2.79:1 one: same shape as the TV's own player; the Green key overrides it by hand). Videos with non-square pixels (some DVD rips) report a size that differs from their true shape, so they may look slightly stretched; the TV's own player corrects for that.
 - Audio codecs the TV cannot decode (for example some AC3/DTS tracks in MP4) play without sound; the widget cannot work around that.
 - The widget cannot hand a file to the TV's built-in media player, so the controls are the widget's own.
 
