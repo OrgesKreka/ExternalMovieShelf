@@ -2,7 +2,7 @@
 
 A poster browser for movies on a USB drive, as a widget for Samsung 2013 F-series TVs (Orsay Smart Hub; developed on a UE46F6500). No extra device needed: the built-in player ignores `folder.jpg` and cover art, this widget shows a poster grid and plays the movie full screen.
 
-**Status: v0.1.18.** Browsing, posters, playback with a transport bar, resume, and SRT subtitles have been tried on a UE46F6500. Orsay APIs are poorly documented, so expect differences on other models.
+**Status: v0.1.19.** Browsing, posters, playback with a transport bar, resume, and SRT subtitles have been tried on a UE46F6500. Orsay APIs are poorly documented, so expect differences on other models.
 
 ## Layout
 

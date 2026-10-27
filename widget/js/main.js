@@ -39,7 +39,7 @@ var Main = (function () {
 	   (1280x720 in the first builds) while actually displaying only the top-left 960x540, so scaling
 	   by the reported size made the page too big. The reported size is logged, not used. */
 	var BASE_W = 960, BASE_H = 540;
-	var VERSION = '0.1.18';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
+	var VERSION = '0.1.19';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
 
 	function fit() {
 		var w = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -93,6 +93,25 @@ var Main = (function () {
 	}
 
 	/* Hand the volume keys back to the TV so it shows its own volume bar and mute icon. */
+	/* Logs whether the bundled subtitle font really loaded: a span set in it is wider than the same
+	   text in the plain monospace fallback only when the font file was applied. */
+	function checkFont() {
+		var probe = document.createElement('span');
+		var fallback = document.createElement('span');
+		var style = 'position:absolute;left:-2000px;top:0;font-size:40px;white-space:nowrap;';
+		probe.style.cssText = style + "font-family:'SubFont',monospace;";
+		fallback.style.cssText = style + 'font-family:monospace;';
+		probe.innerText = fallback.innerText = 'Subtitle font mmmmmmmWWWilli';
+		document.body.appendChild(probe);
+		document.body.appendChild(fallback);
+		setTimeout(function () {
+			var a = probe.offsetWidth, b = fallback.offsetWidth;
+			Log.add('Subtitle font: ' + (a !== b ? 'loaded' : 'NOT loaded, fallback in use') + ' (' + a + ' vs ' + b + ')');
+			document.body.removeChild(probe);
+			document.body.removeChild(fallback);
+		}, 2500);
+	}
+
 	function setupSound() {
 		try {
 			var api = new Common.API.Plugin();
@@ -113,6 +132,7 @@ var Main = (function () {
 		try { $('anchor').focus(); } catch (e1) { errs.push('focus: ' + e1); }
 		try { Store.load(); } catch (e2) { errs.push('Store: ' + e2); }
 		setupSound();
+		checkFont();
 		try { Player.init(showShelf); fit(); } catch (e3) { errs.push('Player/fit: ' + e3); }
 		if (errs.length) {
 			boot.innerHTML = 'Movie Shelf started with errors:<br>' + errs.join('<br>') + '<br><br>Press BLUE for the log.';
