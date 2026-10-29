@@ -7,7 +7,8 @@ try {
 	/* Common API missing: keep the stubs so the page still paints and the error shows in #boot. */
 	widgetAPI = { sendReadyEvent: function () {}, sendReturnEvent: function () {}, blockNavigation: function () {} };
 	tvKey = { KEY_LEFT: 4, KEY_RIGHT: 5, KEY_UP: 29460, KEY_DOWN: 29461, KEY_ENTER: 29443, KEY_PLAY: 71,
-		KEY_PAUSE: 74, KEY_STOP: 70, KEY_RW: 69, KEY_FF: 72, KEY_RED: 108, KEY_GREEN: 20, KEY_BLUE: 22, KEY_YELLOW: 21, KEY_RETURN: 88, KEY_INFO: 31 };
+		KEY_PAUSE: 74, KEY_STOP: 70, KEY_RW: 69, KEY_FF: 72, KEY_RED: 108, KEY_GREEN: 20, KEY_BLUE: 22, KEY_YELLOW: 21, KEY_RETURN: 88, KEY_INFO: 31,
+			KEY_VOL_UP: 7, KEY_VOL_DOWN: 11, KEY_MUTE: 27, KEY_PANEL_VOL_UP: 203, KEY_PANEL_VOL_DOWN: 204 };
 	window.bootErrors = (window.bootErrors || []).concat('Common API missing: ' + e);
 }
 
@@ -39,7 +40,7 @@ var Main = (function () {
 	   (1280x720 in the first builds) while actually displaying only the top-left 960x540, so scaling
 	   by the reported size made the page too big. The reported size is logged, not used. */
 	var BASE_W = 960, BASE_H = 540;
-	var VERSION = '0.2.1';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
+	var VERSION = '0.2.5';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
 
 	function fit() {
 		var w = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -120,13 +121,56 @@ var Main = (function () {
 			api.unregistKey(tvKey.KEY_VOL_UP);
 			api.unregistKey(tvKey.KEY_VOL_DOWN);
 			api.unregistKey(tvKey.KEY_MUTE);
-			Log.add('Volume keys released to the TV');
+			Log.add('Volume keys released to the TV (codes ' + tvKey.KEY_VOL_UP + ' / ' + tvKey.KEY_VOL_DOWN + ' / ' + tvKey.KEY_MUTE + ')');
 		} catch (e) { Log.add('Volume key setup failed: ' + e); }
 		try {
 			api.registKey(tvKey.KEY_INFO);
 			Log.add('INFO key registered');
 		} catch (e3) { Log.add('INFO key not registered: ' + e3); }
 		try { $('pluginNavi').SetBannerState(1); } catch (e2) { Log.add('SetBannerState failed: ' + e2); }
+	}
+
+	/* The TV normally handles the volume keys itself (see setupSound). If one still reaches the widget,
+	   nobody else will act on it, so change the volume here through the audio plugin. Returns true when
+	   the key was a volume key. The log line shows what the plugin did, to settle which side handles them. */
+	function volumeKey(code) {
+		var a, before, after, muted, up, down;
+		up = code === tvKey.KEY_VOL_UP || code === tvKey.KEY_PANEL_VOL_UP;
+		down = code === tvKey.KEY_VOL_DOWN || code === tvKey.KEY_PANEL_VOL_DOWN;
+		if (!up && !down && code !== tvKey.KEY_MUTE) { return false; }
+		try {
+			a = $('pluginAudio');
+			before = a.GetVolume();
+			if (up || down) {
+				if (a.GetUserMute()) { a.SetUserMute(0); }          /* changing the volume ends mute */
+				a.SetVolumeWithKey(up ? 0 : 1);                     /* 0 = up, 1 = down */
+			} else {
+				a.SetUserMute(a.GetUserMute() ? 0 : 1);
+			}
+			after = a.GetVolume();
+			muted = !!a.GetUserMute();
+			Log.add('Volume key ' + code + ' reached the widget: volume ' + before + ' -> ' + after + ', muted ' + (muted ? 1 : 0));
+			showVolume(after, muted);
+		} catch (e) { Log.add('Volume key ' + code + ' failed: ' + e); }
+		return true;
+	}
+
+	/* The volume bar (top right, over the shelf and over the movie): level 0-100 as a bar and a number,
+	   or "MUTE". It goes away by itself after a moment. */
+	var VOL_SHOW_MS = 2500;
+	var volTimer = null;
+
+	function showVolume(level, muted) {
+		var n = Math.max(0, Math.min(100, parseInt(level, 10) || 0));
+		$('volIcon').src = muted ? 'img/vol-mute.png' : 'img/vol-on.png';
+		$('volLabel').innerText = muted ? 'Muted' : 'Volume';
+		$('volNum').innerText = muted ? 'MUTE' : String(n);
+		$('volFill').style.width = Math.round(n * 2.28) + 'px';
+		$('volFill').className = muted ? 'muted' : '';
+		$('vol').className = muted ? 'muted' : '';
+		$('vol').style.display = 'block';
+		if (volTimer) { clearTimeout(volTimer); }
+		volTimer = setTimeout(function () { volTimer = null; $('vol').style.display = 'none'; }, VOL_SHOW_MS);
 	}
 
 	function onLoad() {
@@ -478,6 +522,8 @@ var Main = (function () {
 
 	function onKeyDown(event) {
 		var code = event.keyCode;
+
+		if (volumeKey(code)) { widgetAPI.blockNavigation(event); return; }
 
 		if (calEl) {
 			if (code === tvKey.KEY_RED || code === tvKey.KEY_RETURN) { calibrate(); widgetAPI.blockNavigation(event); }

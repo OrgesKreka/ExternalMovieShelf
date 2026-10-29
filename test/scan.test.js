@@ -195,4 +195,12 @@ assert.equal(jfBy['d.mp4'].backdrop, '/dtv/usb/sda1/Filma/D/d.backdrop.jpg', 'th
 assert.equal(jfBy['e1.mp4'].backdrop, '/dtv/usb/sda1/Filma/E/e1.backdrop.jpg');
 assert.equal(jfBy['e2.mp4'].backdrop, '/dtv/usb/sda1/Filma/E/e2-fanart.jpg', 'several videos: a shared backdrop.jpg is not assigned');
 
+// the volume bar's speaker icons exist, are real PNGs, and the page and the script point at them
+['vol-on.png', 'vol-mute.png'].forEach(function (n) {
+	var bytes = fs.readFileSync(path.join(__dirname, '..', 'widget', 'img', n));
+	assert.deepEqual(Array.prototype.slice.call(bytes, 0, 8), [137, 80, 78, 71, 13, 10, 26, 10], n + ' is not a PNG');
+	assert.ok(mainText.indexOf('img/' + n) >= 0, n + ' is not used by main.js');
+});
+assert.ok(fs.readFileSync(path.join(__dirname, '..', 'widget', 'index.html'), 'utf8').indexOf('img/vol-on.png') >= 0);
+
 console.log('scan.test.js: all passed (' + movies.length + ' movies)');

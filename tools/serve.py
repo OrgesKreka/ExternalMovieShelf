@@ -1,4 +1,5 @@
 """Zip widget/, write widgetlist.xml, and serve both on port 80 for Samsung App Sync.
+The TV can also POST its on-screen log (BLUE) to /log; it is saved under tools/_logs/.
 
 Run from anywhere:  python tools/serve.py
 Port 80 may need an elevated terminal on Windows; allow it through the firewall on private networks.
@@ -18,7 +19,8 @@ SITE = os.path.join(ROOT, "tools", "_site")
 NAME = "MovieShelf"
 WIDGET_ID = NAME  # set in main(): stamped per start so the TV never reuses a cached install
 PORT = 80
-STAGE = None  # set by --stage 1|2 to ship a test page as index.html instead of the real one
+LOGS = os.path.join(ROOT, "tools", "_logs")   # logs sent from the TV (BLUE key)
+MAX_LOG_BYTES = 512 * 1024
 
 
 def widget_version():
@@ -53,9 +55,9 @@ def build(ip):
             for f in files:
                 full = os.path.join(folder, f)
                 rel = os.path.relpath(full, WIDGET).replace(os.sep, "/")
-                if rel == "index.html" and STAGE:
-                    full = os.path.join(ROOT, "tools", "stages", "stage%s.html" % STAGE)
                 z.write(full, rel)
+        # Where the widget sends its log (BLUE). Written per build because the PC's address is not known earlier.
+        z.writestr("js/build.js", 'var BUILD = { logUrl: "http://%s:%d/log" };\n' % (ip, PORT))
     size = os.path.getsize(zip_path)
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -93,15 +95,47 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=SITE, **kwargs)
 
+    def _reply(self, code, text=""):
+        body = text.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Access-Control-Allow-Origin", "*")      # the widget's page is not served from here
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if body and self.command != "HEAD":
+            self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self._reply(204)
+
+    def do_POST(self):
+        """The widget's on-screen log (BLUE on the TV) arrives here and is saved under tools/_logs/."""
+        if self.path.split("?")[0] != "/log":
+            self._reply(404, "not found")
+            return
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            size = -1
+        if size < 0 or size > MAX_LOG_BYTES:
+            self._reply(413, "log too large")
+            return
+        text = self.rfile.read(size).decode("utf-8", errors="replace")
+        os.makedirs(LOGS, exist_ok=True)
+        path = os.path.join(LOGS, "tv-%s.log" % time.strftime("%Y%m%d-%H%M%S"))
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        print("--- TV log from %s: %d lines, saved to %s ---" % (self.client_address[0], text.count("\n") + 1, path))
+        print(text)
+        self._reply(200, "ok")
+
 
 def main():
-    global STAGE, WIDGET_ID
+    global WIDGET_ID
     args = sys.argv[1:]
     if "--stable-id" not in args:
         WIDGET_ID = NAME + "_" + time.strftime("%Y%m%d%H%M%S")
-    if "--stage" in args and args.index("--stage") + 1 < len(args) and args[args.index("--stage") + 1] in ("1", "2", "3"):
-        STAGE = args[args.index("--stage") + 1]
-        print("TEST STAGE %s: shipping tools/stages/stage%s.html as index.html" % (STAGE, STAGE))
     ip = local_ip()
     size = build(ip)
     print("Movie Shelf v%s" % widget_version())

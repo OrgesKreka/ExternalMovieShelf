@@ -4,7 +4,7 @@
 
 Plug a USB drive into a Samsung F-series TV (2013, "Orsay" Smart Hub) and its built-in browser shows a wall of grey folder icons and plays files with no cover art. Movie Shelf replaces that with a poster grid, a details screen, and a proper player with resume and subtitles. It runs on the TV itself. No streaming box, no PC left running, no server.
 
-Built and tested on a Samsung UE46F6500. Current version: **0.2.1**.
+Built and tested on a Samsung UE46F6500. Current version: **0.2.5**.
 
 ## Before and after
 
@@ -122,9 +122,10 @@ Already have posters that are too big for the TV? `python tools/posters.py E:\ -
 | Shelf | **Info** | Details screen |
 | Shelf | Yellow | Jump to the next letter |
 | Shelf | Green | Look for the drive and movies again |
-| Shelf | Blue | Show or hide the log (for troubleshooting) |
+| Shelf | Blue | Show or hide the log (for troubleshooting). Opening it also sends the log to the PC |
 | Shelf | Red | Calibration screen (shows what the TV really displays) |
 | Shelf | Return | Exit |
+| Anywhere | Volume +/-, Mute | Change the volume. A bar with a speaker icon and the level (0-100) shows at the top right for a moment; Mute shows a crossed-out speaker and "MUTE". Changing the volume while muted ends the mute |
 | Details | Left / Right | Previous / next movie |
 | Details | Enter / Play | Play |
 | Details | Return / Info | Back to the shelf |
@@ -165,6 +166,8 @@ These are the known limits, so nothing comes as a surprise.
 
 Press **Blue** on the shelf to show the log. It is the first thing to look at, and it starts fresh every time the app starts.
 
+**The log also goes to your PC.** Opening it sends it to `serve.py`, which prints it in its window and saves it under `tools/_logs/` (one file per press). So you can copy it instead of photographing the screen. The last line of the on-screen log says whether that worked. It needs `serve.py` to be running, and the build to come from it, because `serve.py` writes its own address into every build.
+
 | Symptom | Cause and fix |
 |---|---|
 | The TV keeps showing an old version | It remembers apps by id. Restart `serve.py` (new id), run App Sync again, open the newest entry, and compare the version next to the title with the one `serve.py` printed. |
@@ -187,19 +190,18 @@ Press **Blue** on the shelf to show the log. It is the first thing to look at, a
 ### Project layout
 
 ```
-widget/              the Orsay widget (config.xml, index.html, css/, fonts/, icon/, js/)
+widget/              the Orsay widget (config.xml, index.html, css/, fonts/, icon/, img/, js/)
   js/main.js         grid, focus, scanning states, details screen, key handling, calibration
   js/usb.js          find the USB mount, walk folders, pick posters/backdrops/subtitles, clean titles, sort
   js/player.js       playback, transport bar, picture shape, resume, subtitle clock
   js/subs.js         SRT parser and loader
   js/info.js         reads <video>.tmdb.json for the INFO screen
   js/store.js        resume positions (FileSystem common file MovieShelf/resume.json)
-  js/log.js          on-screen log (Blue key)
-tools/serve.py       zips widget/, writes widgetlist.xml, serves it on port 80 for App Sync
+  js/log.js          on-screen log (Blue key), sends itself to the PC when opened
+tools/serve.py       zips widget/, writes widgetlist.xml, serves it on port 80 for App Sync, saves logs the TV sends
 tools/tmdb_tag.py    adds [tmdbid-N] to folders (TMDB search, only certain matches, --undo)
 tools/tmdb_posters.py downloads posters, backdrops and details from TMDB by id
 tools/posters.py     shrinks existing posters to 300x450 (needs Pillow)
-tools/make_icons.py  regenerates widget/icon/*.png (no dependencies)
 test/                node and python tests (below)
 docs/screenshots/    the pictures in this README
 .github/workflows/   runs the tests on every push
@@ -213,10 +215,13 @@ docs/screenshots/    the pictures in this README
 node test/scan.test.js       scanning, titles, sorting, subtitles, backdrops, version match, ASCII-only scripts
 node test/info.test.js       the details file
 node test/player.test.js     playback logic against a fake TV plugin and fake timers
+node test/log.test.js        the on-screen log and sending it to the PC
+node test/volume.test.js     the volume keys and the volume bar
 python test/test_tmdb.py     both TMDB scripts against a fake TMDB
+python test/test_serve.py    the log endpoint of serve.py and the address written into each build
 ```
 
-None of them needs a TV, a key or the network, and GitHub Actions runs all four on every push. They cannot tell how the old TV browser draws something; that still needs a look at the TV.
+None of them needs a TV, a key or the internet, and GitHub Actions runs all of them on every push. They cannot tell how the old TV browser draws something; that still needs a look at the TV.
 
 ### What the TV taught us
 
@@ -230,6 +235,7 @@ Orsay's browser is old WebKit: ES5 only (no `let`/`const`, arrow functions or te
 - Video plays on a plane behind the page, so the page goes transparent (`body.playing`) during playback. The TV stretches the picture to the area it is given, so the area must have the video's shape.
 - The TV keeps a cached copy of a widget per id, hence the stamped id.
 - The INFO key reaches a widget only after `registKey`.
+- On the UE46F6500 the volume and mute keys are delivered to the widget, and `unregistKey` does not hand them back to the TV. The widget has to change the volume itself (audio plugin, `SetVolumeWithKey`) and draw its own volume bar.
 
 ### Ideas
 

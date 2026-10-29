@@ -23,6 +23,12 @@ jobs:
         run: node test/info.test.js
       - name: Player logic
         run: node test/player.test.js
+      - name: Volume keys and the volume bar
+        run: node test/volume.test.js
+      - name: On-screen log and its upload
+        run: node test/log.test.js
+      - name: Install server and log endpoint
+        run: python -W error test/test_serve.py
       - name: TMDB scripts (offline, fake API)
         run: python -W error test/test_tmdb.py
       - name: Tools compile
