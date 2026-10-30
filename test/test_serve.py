@@ -57,6 +57,7 @@ class LogEndpoint(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as cm:
             self.post("/elsewhere", b"x")
         self.assertEqual(cm.exception.code, 404)
+        cm.exception.close()
         self.assertEqual(self.saved_logs(), [])
 
     def test_a_huge_log_is_refused_before_it_is_read(self):
@@ -90,7 +91,7 @@ class BuildAddress(unittest.TestCase):
                 build = z.read("js/build.js").decode("ascii")
         finally:
             serve.SITE = saved
-        self.assertEqual(build, 'var BUILD = { logUrl: "http://192.168.2.156:%d/log" };\n' % serve.PORT)
+        self.assertEqual(build, 'var BUILD = { logUrl: "http://192.168.2.156:%d/log" };' % serve.PORT + chr(10))
 
     def test_the_page_loads_build_js_before_the_log(self):
         with open(os.path.join(serve.WIDGET, "index.html"), encoding="utf-8") as f:

@@ -304,12 +304,51 @@ test('leaving before any time was reported keeps the older position', function (
 	assert.equal(leaveAt(0, 7200000).Store.get(MOVIE.path), 999);
 });
 
+test('leaving halfway does not mark the movie as watched', function () {
+	assert.equal(leaveAt(300000, 7200000).Store.isWatched(MOVIE.path), false);
+});
+
+test('leaving in the first minute does not mark it as watched either', function () {
+	assert.equal(leaveAt(30000, 7200000).Store.isWatched(MOVIE.path), false);
+});
+
+test('stopping in the last minute counts as watched to the end', function () {
+	var t = leaveAt(7200000 - 30000, 7200000);
+	assert.equal(t.Store.isWatched(MOVIE.path), true);
+	assert.equal(t.Store.get(MOVIE.path), 0);                      /* and there is nothing left to resume */
+});
+
+test('a one-minute clip stopped at the start is not marked as watched', function () {
+	assert.equal(leaveAt(20000, 50000).Store.isWatched(MOVIE.path), false);
+});
+
+test('a watched mark stays when the movie is started again and left halfway', function () {
+	var t = fresh({ dur: 7200000 });
+	t.Store.setWatched(MOVIE.path, true);
+	t.P.play(MOVIE);
+	t.P.onInfo();
+	t.P.onTime(300000);
+	t.key(TV.KEY_RETURN);
+	assert.equal(t.Store.isWatched(MOVIE.path), true);
+	assert.equal(t.Store.get(MOVIE.path), 300);
+});
+
+test('the watched mark is keyed without the mount name and can be removed', function () {
+	var t = fresh();
+	t.Store.setWatched('/dtv/usb/sda1/Filma/Rope/rope.mp4', true);
+	assert.equal(t.Store.isWatched('/dtv/usb/sdb1/Filma/Rope/rope.mp4'), true);
+	assert.equal(t.Store.isWatched('/dtv/usb/sda1/Filma/Other/other.mp4'), false);
+	t.Store.setWatched('/dtv/usb/sdb1/Filma/Rope/rope.mp4', false);
+	assert.equal(t.Store.isWatched('/dtv/usb/sda1/Filma/Rope/rope.mp4'), false);
+});
+
 test('finishing the movie clears the position and goes back to the shelf', function () {
 	var t = fresh();
 	t.Store.set(MOVIE.path, 500);
 	t.P.play(MOVIE);
 	t.P.onEnd();
 	assert.equal(t.Store.get(MOVIE.path), 0);
+	assert.equal(t.Store.isWatched(MOVIE.path), true);
 	assert.equal(t.P.isActive(), false);
 	assert.equal(t.exits(), 1);
 	assert.equal(t.body(), '');

@@ -4,7 +4,7 @@
 
 Plug a USB drive into a Samsung F-series TV (2013, "Orsay" Smart Hub) and its built-in browser shows a wall of grey folder icons and plays files with no cover art. Movie Shelf replaces that with a poster grid, a details screen, and a proper player with resume and subtitles. It runs on the TV itself. No streaming box, no PC left running, no server.
 
-Built and tested on a Samsung UE46F6500. Current version: **0.2.5**.
+Built and tested on a Samsung UE46F6500. Current version: **0.2.9**.
 
 ## Before and after
 
@@ -16,16 +16,17 @@ Built and tested on a Samsung UE46F6500. Current version: **0.2.5**.
 |---|---|
 | ![The TV's built-in player showing the file name](docs/screenshots/before-player.jpg) | ![Movie Shelf's player: title, progress bar, transport buttons and key hints](docs/screenshots/player.jpg) |
 
-Press **INFO** on a movie for the plot, rating, runtime and genres:
+Press **INFO** on a movie for the plot, rating, runtime, genres, director, writers, cast and country:
 
 ![The details screen: poster, tagline, year, runtime, rating, genres and plot on the movie's backdrop](docs/screenshots/info.jpg)
 
 ## What you get
 
 - **A poster grid**, sorted by title (A-Z, "Part 2" before "Part 10"), with a scroll bar and a jump to the next letter.
-- **A details screen** (INFO key) with poster, plot, rating, runtime and genres on top of the movie's backdrop picture.
+- **A details screen** (INFO key) with poster, plot, rating, runtime, genres, director, writers, cast and country on top of the movie's backdrop picture.
 - **A player** with play/pause, jump 30 seconds, restart and stop buttons, a progress bar, and the right picture shape for 4:3 and widescreen movies.
-- **Resume**: leave a movie and it continues where you stopped.
+- **Resume**: leave a movie and it continues where you stopped. A small amber badge on the poster shows the minutes already watched.
+- **Watched marks**: a movie that played to the end (or that you stopped in the last minute) gets a small eye on its poster. You can set or clear the mark yourself on the details screen.
 - **Subtitles**: a `.srt` file next to the movie is picked up automatically.
 - **Posters and details downloaded for you**: two small scripts fill in the pictures and text from TMDB, the way Jellyfin does.
 - **Friendly messages** when no drive is plugged in, the folder is missing or it holds no movies.
@@ -107,9 +108,9 @@ For each movie it saves, into the movie's own folder:
 |---|---|---|
 | `poster.jpg` | poster, 300x450 | the tiles |
 | `backdrop.jpg` | backdrop picture, 640x360 | the shelf background and the INFO screen |
-| `<video name>.tmdb.json` | title, year, tagline, rating, runtime, genres, plot | the INFO screen |
+| `<video name>.tmdb.json` | title, year, tagline, rating, runtime, genres, director(s), writers, the first 8 cast members, countries, plot | the INFO screen |
 
-Existing files are never replaced, and each file is checked on its own, so running it again only fills the gaps. Delete a file to fetch it again. Options: `--posters-only`, `--size` (poster size, default `w342`), `--language` (default `en-US`, also the language of the plot). With Pillow installed the pictures are shrunk to the sizes above, which the TV likes; without it they are saved as TMDB delivers them.
+Existing files are never replaced (apart from an outdated details file, see "Good to know"), and each file is checked on its own, so running it again only fills the gaps. Delete a file to fetch it again. Options: `--posters-only`, `--size` (poster size, default `w342`), `--language` (default `en-US`, also the language of the plot). With Pillow installed the pictures are shrunk to the sizes above, which the TV likes; without it they are saved as TMDB delivers them.
 
 Already have posters that are too big for the TV? `python tools/posters.py E:\ --apply` shrinks them to 300x450 (the old file is kept as `poster.orig.bak`).
 
@@ -128,6 +129,7 @@ Already have posters that are too big for the TV? `python tools/posters.py E:\ -
 | Anywhere | Volume +/-, Mute | Change the volume. A bar with a speaker icon and the level (0-100) shows at the top right for a moment; Mute shows a crossed-out speaker and "MUTE". Changing the volume while muted ends the mute |
 | Details | Left / Right | Previous / next movie |
 | Details | Enter / Play | Play |
+| Details | Yellow | Mark the movie as watched / not watched (the eye badge on its poster follows) |
 | Details | Return / Info | Back to the shelf |
 | Playing | Enter / Play / Pause | Pause / resume |
 | Playing | Left, Right / RW, FF | Jump 30 seconds |
@@ -156,9 +158,10 @@ These are the known limits, so nothing comes as a surprise.
 
 **The TV and the install**
 - Developed on one TV (UE46F6500). Other models may report other screen sizes, lack some plugin calls, or not deliver the INFO key to widgets.
-- Resume positions are saved only when you leave after 1 minute and with more than 1 minute left. They live in a file on the TV, not on the drive.
+- Resume positions are saved only when you leave after 1 minute and with more than 1 minute left. They live in a file on the TV, not on the drive, and so do the watched marks. A drive moved to another TV starts without them.
 - Every `serve.py` start adds a new entry to More Apps; delete the old ones by hand.
-- The details text is cut at about 700 characters, and its language is the one used when it was downloaded.
+- The plot is cut at about 430 characters, and its language is the one used when it was downloaded. Names (director, cast) come from TMDB as they are written there.
+- A details file written by an older version (no director or cast) is refreshed once by the next `tmdb_posters.py --apply`; it is the only existing file the script ever replaces.
 - The shelf's tint comes from the poster's average color when the TV allows reading it; otherwise a color picked from the title is used.
 - The TMDB scripts have been tried on a real drive, but their tests only use a fake TMDB.
 
@@ -178,7 +181,7 @@ Press **Blue** on the shelf to show the log. It is the first thing to look at, a
 | "Folder Filma not found" | Create a folder named `Filma` on the drive, with one folder per movie. |
 | A movie has no poster | Add `poster.jpg` or run the TMDB scripts. Very large or progressive JPEGs can fail on the TV; Pillow converts them to 300x450 baseline. |
 | INFO does nothing | In the log, `INFO key registered` should appear at start, and `Unhandled key N` shows what the remote sent. Without it the TV is not delivering the key. |
-| INFO says "No details" | Run `tmdb_posters.py --apply`. The folder name needs `[tmdbid-N]`; `tmdb_tag.py` adds it. |
+| INFO says "No details", or shows no director or cast | The details file on the drive is missing or from an older version. The folder name needs `[tmdbid-N]` (`tmdb_tag.py` adds it); then run `tmdb_posters.py --apply` with the drive in the PC and press Green on the shelf. |
 | Subtitles look different from the TV player | The log shows `Subtitle font: loaded` or `NOT loaded`. The widget draws them itself, not the TV. |
 | The picture is the wrong shape | The log shows `Video size WxH` and `Picture area`. Press Green while playing to pick another shape. |
 | `serve.py` says the port is in use | Another copy is still running. Stop it first. |
@@ -214,8 +217,10 @@ docs/screenshots/    the pictures in this README
 ```
 node test/scan.test.js       scanning, titles, sorting, subtitles, backdrops, version match, ASCII-only scripts
 node test/info.test.js       the details file
-node test/player.test.js     playback logic against a fake TV plugin and fake timers
+node test/player.test.js     playback logic (shape, keys, resume, watched marks) against a fake TV plugin and fake timers
 node test/log.test.js        the on-screen log and sending it to the PC
+node test/store.test.js      saved positions, watched marks, picture shapes (in-memory FileSystem)
+node test/shelf.test.js      the shelf, the details screen, the watched marks and the backdrop (fake drive, fake DOM)
 node test/volume.test.js     the volume keys and the volume bar
 python test/test_tmdb.py     both TMDB scripts against a fake TMDB
 python test/test_serve.py    the log endpoint of serve.py and the address written into each build

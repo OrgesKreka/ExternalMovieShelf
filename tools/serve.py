@@ -95,12 +95,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=SITE, **kwargs)
 
-    def _reply(self, code, text=""):
+    def _reply(self, code, text="", content_type="text/plain; charset=utf-8"):
         body = text.encode("utf-8")
         self.send_response(code)
         self.send_header("Access-Control-Allow-Origin", "*")      # the widget's page is not served from here
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if body and self.command != "HEAD":

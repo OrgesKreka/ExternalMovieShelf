@@ -40,7 +40,7 @@ var Main = (function () {
 	   (1280x720 in the first builds) while actually displaying only the top-left 960x540, so scaling
 	   by the reported size made the page too big. The reported size is logged, not used. */
 	var BASE_W = 960, BASE_H = 540;
-	var VERSION = '0.2.5';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
+	var VERSION = '0.2.9';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
 
 	function fit() {
 		var w = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -282,6 +282,7 @@ var Main = (function () {
 		var title = document.createElement('div');
 		var year = document.createElement('div');
 		var res = document.createElement('div');
+		var seen = document.createElement('div');
 		var dim = document.createElement('div');
 
 		el.className = 'cell';
@@ -295,14 +296,17 @@ var Main = (function () {
 		year.className = 'cyear';
 		year.innerText = m.year;
 		res.className = 'cres';
+		seen.className = 'cseen';
+		seen.innerHTML = '<div class="eye"><i></i></div>';   /* the watched badge: an eye */
 		dim.className = 'dim';
 		poster.appendChild(ph);
 		poster.appendChild(dim);
+		poster.appendChild(seen);
 		poster.appendChild(res);
 		el.appendChild(poster);
 		el.appendChild(title);
 		el.appendChild(year);
-		return { el: el, poster: poster, res: res, movie: m, img: null, failed: false };
+		return { el: el, poster: poster, res: res, seen: seen, dim: dim, movie: m, img: null, failed: false };
 	}
 
 	function updateResume() {
@@ -311,6 +315,7 @@ var Main = (function () {
 			s = Store.get(cells[i].movie.path);
 			cells[i].res.style.display = s > 0 ? 'block' : 'none';
 			if (s > 0) { cells[i].res.innerText = minutes(s); }
+			cells[i].seen.style.display = Store.isWatched(cells[i].movie.path) ? 'block' : 'none';
 		}
 	}
 
@@ -325,7 +330,7 @@ var Main = (function () {
 			unloadPoster(c);
 		};
 		c.img = img;
-		c.poster.insertBefore(img, c.poster.lastChild.previousSibling);
+		c.poster.insertBefore(img, c.dim);   /* under the dimming overlay and the badges */
 		img.src = 'file://' + encodeURI(c.movie.poster);
 	}
 
@@ -440,7 +445,7 @@ var Main = (function () {
 
 	/* ---- details screen (INFO) ---- */
 	var infoOpen = false;
-	var MAX_TEXT = 700;
+	var MAX_TEXT = 430;     /* the plot box holds six lines; the credits go under it */
 
 	function setPicture(el, pic) {
 		el.style.backgroundImage = pic
@@ -450,8 +455,25 @@ var Main = (function () {
 		el.style.backgroundRepeat = 'no-repeat';
 	}
 
+	/* Director, writers, cast and country as label/value rows under the plot. */
+	function showCredits(d) {
+		var box = $('infoCredits'), rows = Info.rows(d), i, row, label, value;
+		while (box.firstChild) { box.removeChild(box.firstChild); }
+		for (i = 0; i < rows.length; i++) {
+			row = document.createElement('div');
+			label = document.createElement('b');
+			value = document.createElement('span');
+			row.className = 'irow';
+			label.innerText = rows[i].label;
+			value.innerText = rows[i].text;
+			row.appendChild(label);
+			row.appendChild(value);
+			box.appendChild(row);
+		}
+	}
+
 	function renderInfo() {
-		var m = cells[sel].movie, d = m.details, img = $('infoPoster'), text, plain = m.title + (m.year ? ' (' + m.year + ')' : '');
+		var m = cells[sel].movie, d = m.details, img = $('infoPoster'), text, seen, plain = m.title + (m.year ? ' (' + m.year + ')' : '');
 		setPicture($('info'), m.backdrop);
 		img.style.display = m.poster ? 'block' : 'none';
 		img.onerror = function () { img.style.display = 'none'; };
@@ -467,6 +489,10 @@ var Main = (function () {
 			text = 'No details for this movie yet. Run tools/tmdb_posters.py on the drive (see the README).';
 		}
 		$('infoText').innerText = text;
+		showCredits(d);
+		seen = Store.isWatched(m.path);
+		$('infoSeen').className = seen ? 'on' : '';
+		$('infoSeenText').innerText = seen ? 'Watched. Press YELLOW to mark it as not watched.' : 'Not watched yet. Press YELLOW to mark it as watched.';
 	}
 
 	/* Shows the selected movie; its details file is read once (m.details: undefined = not yet, null = none). */
@@ -540,6 +566,7 @@ var Main = (function () {
 			else if (code === tvKey.KEY_ENTER || code === tvKey.KEY_PLAY) { closeInfo(); Player.play(cells[sel].movie); }
 			else if (code === tvKey.KEY_LEFT) { select(sel > 0 ? sel - 1 : cells.length - 1); refreshInfo(); }
 			else if (code === tvKey.KEY_RIGHT) { select(sel < cells.length - 1 ? sel + 1 : 0); refreshInfo(); }
+			else if (code === tvKey.KEY_YELLOW) { Store.setWatched(cells[sel].movie.path, !Store.isWatched(cells[sel].movie.path)); updateResume(); renderInfo(); }
 			widgetAPI.blockNavigation(event);
 			return;
 		}

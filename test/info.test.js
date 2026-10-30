@@ -25,4 +25,14 @@ assert.equal(Info.meta({ year: '1995', runtime: 0, rating: 0, genres: [] }), '19
 assert.equal(Info.meta({}), '');
 assert.equal(Info.meta(null), '');
 
+// rows: director, writers, cast and country under the plot; missing parts are left out
+assert.deepEqual(Info.rows({ directors: ['A'], writers: ['B', 'C'], cast: ['D', 'E'], countries: ['France'] }), [
+	{ label: 'Director', text: 'A' }, { label: 'Writers', text: 'B, C' }, { label: 'Cast', text: 'D, E' }, { label: 'Country', text: 'France' }]);
+assert.deepEqual(Info.rows({ directors: ['A', 'B'], countries: ['X', 'Y'] }), [
+	{ label: 'Directors', text: 'A, B' }, { label: 'Countries', text: 'X, Y' }]);
+assert.deepEqual(Info.rows({ title: 'Only the plain details of an older version' }), []);
+assert.deepEqual(Info.rows({ cast: [] }), []);
+assert.deepEqual(Info.rows(null), []);
+assert.equal(Info.rows({ cast: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] })[0].text, '1, 2, 3, 4, 5, 6, 7, 8', 'at most 8 names of the cast');
+
 console.log('info.test.js: all passed');

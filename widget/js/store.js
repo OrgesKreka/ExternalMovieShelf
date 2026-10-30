@@ -26,10 +26,24 @@ var Store = (function () {
 				f.closeCommonFile(h);
 				if (text) { data = JSON.parse(text) || {}; }
 			}
+			dropOldDetails();
 			Log.add('Store: loaded ' + countKeys() + ' positions');
 		} catch (e) {
 			Log.add('Store load failed: ' + e);
 			data = {};
+		}
+	}
+
+	/* Version 0.2.8 briefly kept movie details here ('details:<id>'). They belong on the drive (tools/tmdb_posters.py),
+	   not in this small file, so they are removed once. */
+	function dropOldDetails() {
+		var k, n = 0;
+		for (k in data) {
+			if (data.hasOwnProperty(k) && k.indexOf('details:') === 0) { delete data[k]; n++; }
+		}
+		if (n) {
+			Log.add('Store: removed ' + n + ' saved details that no longer belong here');
+			save();
 		}
 	}
 
@@ -77,5 +91,12 @@ var Store = (function () {
 		if (had) { save(); }
 	}
 
-	return { load: load, get: get, set: set, clear: clear, norm: norm };
+	/* "Watched to the end" marks live in the same file, as 'watched:<path without the mount name>' = 1. */
+	function watchedKey(path) { return 'watched:' + norm(path); }
+	function isWatched(path) { return get(watchedKey(path)) > 0; }
+	function setWatched(path, on) {
+		if (on) { set(watchedKey(path), 1); } else { clear(watchedKey(path)); }
+	}
+
+	return { load: load, get: get, set: set, clear: clear, norm: norm, isWatched: isWatched, setWatched: setWatched };
 })();

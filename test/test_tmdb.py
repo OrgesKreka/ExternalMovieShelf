@@ -19,7 +19,13 @@ class FakeApi:
         self.asked.append(tid)
         return {"id": tid, "title": "Title %d é" % tid, "release_date": "1999-03-31", "vote_average": 8.2345,
                 "runtime": 136, "genres": [{"name": "Action"}, {"name": "Sci-Fi"}], "overview": "Plot of %d." % tid,
-                "poster_path": "/p%d.jpg" % tid if tid != 7 else None, "backdrop_path": "/b%d.jpg" % tid}
+                "poster_path": "/p%d.jpg" % tid if tid != 7 else None, "backdrop_path": "/b%d.jpg" % tid,
+                "production_countries": [{"name": "United States of America"}, {"name": "Germany"}],
+                "credits": {
+                    "cast": [{"name": "Third Actor", "order": 2}, {"name": "First Actor", "order": 0}, {"name": "Second Actor", "order": 1}],
+                    "crew": [{"name": "Some Producer", "job": "Producer"}, {"name": "Main Director", "job": "Director"},
+                             {"name": "Co Director", "job": "Director"}, {"name": "Screen Writer", "job": "Screenplay"},
+                             {"name": "Screen Writer", "job": "Writer"}, {"name": "Story Teller", "job": "Story"}]}}
 
     def image(self, path, kind="poster"):
         self.images.append((kind, path))
@@ -115,6 +121,11 @@ class RunTests(unittest.TestCase):
         info = json.loads(raw)
         self.assertEqual((info["id"], info["year"], info["rating"], info["runtime"]), (949, "1999", 8.2, 136))
         self.assertEqual(info["genres"], ["Action", "Sci-Fi"])
+        self.assertEqual(info["directors"], ["Main Director", "Co Director"])
+        self.assertEqual(info["writers"], ["Screen Writer", "Story Teller"])          # no duplicates, producers left out
+        self.assertEqual(info["cast"], ["First Actor", "Second Actor", "Third Actor"])   # in billing order
+        self.assertEqual(info["countries"], ["United States of America", "Germany"])
+        self.assertEqual(info["format"], t.DETAILS_FORMAT)
         self.assertEqual(info["title"], "Title 949 é")                      # escaped in the file, decoded by JSON
         self.assertIn("\\u00e9", raw)
         # the folder that already had a poster still gets its missing backdrop and details
@@ -124,7 +135,7 @@ class RunTests(unittest.TestCase):
 
     def test_jellyfin_backdrop_names_count_as_existing(self):
         make(self.dir, {"Filma/Fan [tmdbid-8]/f.mp4": "", "Filma/Fan [tmdbid-8]/fanart.jpg": "x", "Filma/Fan [tmdbid-8]/poster.jpg": "p",
-                        "Filma/Fan [tmdbid-8]/f.tmdb.json": "{}"})
+                        "Filma/Fan [tmdbid-8]/f.tmdb.json": '{"format": 2}'})
         api = FakeApi()
         t.run(self.root, api, True, out=lambda l: None)
         self.assertNotIn(8, api.asked)                              # complete: poster, fanart.jpg as backdrop, details
@@ -133,7 +144,7 @@ class RunTests(unittest.TestCase):
     def test_old_backdrop_name_is_moved_to_the_jellyfin_name(self):
         folder = os.path.join(self.dir, "Filma", "Old [tmdbid-9]")
         make(self.dir, {"Filma/Old [tmdbid-9]/o.mp4": "", "Filma/Old [tmdbid-9]/poster.jpg": "p",
-                        "Filma/Old [tmdbid-9]/o.backdrop.jpg": "old", "Filma/Old [tmdbid-9]/o.tmdb.json": "{}"})
+                        "Filma/Old [tmdbid-9]/o.backdrop.jpg": "old", "Filma/Old [tmdbid-9]/o.tmdb.json": '{"format": 2}'})
         lines = []
         t.run(self.root, None, False, out=lines.append)             # dry run: announces it, changes nothing
         self.assertTrue(any("would rename o.backdrop.jpg" in l for l in lines))
@@ -153,6 +164,41 @@ class RunTests(unittest.TestCase):
         self.assertTrue(os.path.isfile(os.path.join(folder, "b.backdrop.jpg")))
         self.assertTrue(os.path.isfile(os.path.join(folder, "a.jpg")))
         self.assertFalse(os.path.exists(os.path.join(folder, "backdrop.jpg")))
+
+    def test_details_from_an_older_version_are_refreshed_once(self):
+        folder = os.path.join(self.dir, "Filma", "Older [tmdbid-11]")
+        make(self.dir, {"Filma/Older [tmdbid-11]/o.mp4": "", "Filma/Older [tmdbid-11]/poster.jpg": "p",
+                        "Filma/Older [tmdbid-11]/backdrop.jpg": "b", "Filma/Older [tmdbid-11]/o.tmdb.json": '{"title": "Old"}'})
+        lines = []
+        t.run(self.root, None, False, out=lines.append)
+        self.assertTrue(any("Older" in l and "details" in l for l in lines))
+        api = FakeApi()
+        stats = t.run(self.root, api, True, out=lambda l: None)
+        self.assertIn(11, api.asked)
+        self.assertEqual(json.loads(slurp(os.path.join(folder, "o.tmdb.json"), "r"))["format"], t.DETAILS_FORMAT)
+        self.assertEqual(slurp(os.path.join(folder, "poster.jpg"), "r"), "p")      # only the details were redone
+        api2 = FakeApi()
+        t.run(self.root, api2, True, out=lambda l: None)
+        self.assertNotIn(11, api2.asked)                                           # now current: left alone
+
+    def test_a_broken_details_file_is_rewritten(self):
+        make(self.dir, {"Filma/Broken [tmdbid-12]/b.mp4": "", "Filma/Broken [tmdbid-12]/poster.jpg": "p",
+                        "Filma/Broken [tmdbid-12]/backdrop.jpg": "b", "Filma/Broken [tmdbid-12]/b.tmdb.json": "not json"})
+        api = FakeApi()
+        t.run(self.root, api, True, out=lambda l: None)
+        self.assertIn(12, api.asked)
+
+    def test_the_credits_are_asked_for_in_the_same_request(self):
+        captured = {}
+
+        class Probe(t.Tmdb):
+            def get_json(self, path, params=None):
+                captured.update(path=path, params=params)
+                return {}
+
+        Probe("k").movie(949)
+        self.assertEqual(captured["path"], "/movie/949")
+        self.assertEqual(captured["params"], {"append_to_response": "credits"})
 
     def test_second_run_downloads_nothing(self):
         t.run(self.root, FakeApi(), True, out=lambda l: None)

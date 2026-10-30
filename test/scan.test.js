@@ -127,6 +127,7 @@ var fs = require('fs'), path = require('path');
 fs.readdirSync(path.join(__dirname, '..', 'widget', 'js')).forEach(function (f) {
 	var text = fs.readFileSync(path.join(__dirname, '..', 'widget', 'js', f), 'utf8');
 	for (var i = 0; i < text.length; i++) { assert.ok(text.charCodeAt(i) < 128, f + ' has a non-ASCII character at ' + i + '; use \\uXXXX'); }
+	for (var j = 0; j < text.length; j++) { var c = text.charCodeAt(j); assert.ok(c >= 32 || c === 9 || c === 10 || c === 13, f + ' has a control character (code ' + c + ') at ' + j + ', e.g. an escape that got interpreted'); }
 });
 
 // accents fold and the BOM / replacement-character checks still work as escapes

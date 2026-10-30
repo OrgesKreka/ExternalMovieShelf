@@ -2,12 +2,14 @@ r"""Download posters, backdrops and details from TMDB into the movie folders.
 
 Only movie folders whose name carries the TMDB id are processed (Jellyfin style):
   "Heat (1995) [tmdbid-949]"   (also {tmdb-949} and tmdbid=949)
-Folders without an id are ignored. Files that already exist are never replaced.
+Folders without an id are ignored. Files that already exist are never replaced, except a details file
+written by an older version of this script (without director and cast), which is refreshed once.
 
 Per movie, in the movie's folder, named the way Jellyfin names them:
   poster.jpg            the poster
   backdrop.jpg          a 16:9 backdrop picture, used as the shelf and info-screen background
-  <video>.tmdb.json     title, year, rating, runtime, genres, overview (shown with INFO on the TV)
+  <video>.tmdb.json     title, year, rating, runtime, genres, director, writers, cast, countries, plot
+                        (shown with INFO on the TV; one from an older version is refreshed once)
 A folder holding several videos names the pictures after each video instead: <video>.jpg and
 <video>.backdrop.jpg. Jellyfin's own fanart.jpg and background.jpg count as an existing backdrop, and a
 <video>.backdrop.jpg from an earlier version is renamed to backdrop.jpg.
@@ -81,6 +83,20 @@ def base(name):
     return os.path.splitext(name)[0]
 
 
+DETAILS_FORMAT = 2     # 1: title, rating...; 2: adds directors, writers, cast, countries
+WRITER_JOBS = ("Screenplay", "Writer", "Story")
+
+
+def details_current(path):
+    """True when the details file exists in the current format. An older one counts as missing, so the
+    next run refreshes it once (the file is ours; nobody edits it by hand)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return int(json.load(f).get("format", 1)) >= DETAILS_FORMAT
+    except (OSError, ValueError, AttributeError, TypeError):
+        return False
+
+
 BACKDROP_NAMES = ("backdrop", "fanart", "background")       # what Jellyfin calls the backdrop picture
 
 
@@ -101,7 +117,7 @@ class Movie:
         self.legacy_exists = os.path.isfile(self.legacy_backdrop)
         self.backdrop_exists = self.legacy_exists if not single else any(
             os.path.isfile(os.path.join(folder, n + ext)) for n in BACKDROP_NAMES for ext in (".jpg", ".jpeg", ".png", ".JPG"))
-        self.info_exists = os.path.isfile(self.info_target)
+        self.info_exists = details_current(self.info_target)
 
 
 def find_movie_dir(root):
@@ -190,8 +206,8 @@ class Tmdb:
         return json.loads(self._request(API + path + "?" + urllib.parse.urlencode(params), headers))
 
     def movie(self, tmdb_id):
-        """Everything the scripts need about a movie, in one request."""
-        return self.get_json("/movie/%d" % tmdb_id)
+        """Everything the scripts need about a movie, in one request (the credits ride along)."""
+        return self.get_json("/movie/%d" % tmdb_id, {"append_to_response": "credits"})
 
     def search(self, title, year=""):
         """Top search results for a title (and release year when given)."""
@@ -219,11 +235,26 @@ def to_jpeg(data, size=POSTER_SIZE):
     return buf.getvalue(), True
 
 
+def names(people, limit):
+    """The first `limit` different names."""
+    out = []
+    for p in people:
+        n = (p.get("name") or "").strip()
+        if n and n not in out:
+            out.append(n)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def make_details(info):
     """The small JSON the widget shows. ASCII-only (\\uXXXX escapes): the TV may misread other charsets."""
     overview = (info.get("overview") or "").strip()
     if len(overview) > MAX_OVERVIEW:
         overview = overview[:MAX_OVERVIEW].rsplit(" ", 1)[0] + "..."
+    credits = info.get("credits") or {}
+    crew = credits.get("crew") or []
+    cast = sorted(credits.get("cast") or [], key=lambda p: p.get("order", 999))
     details = {
         "id": info.get("id"),
         "title": info.get("title") or "",
@@ -232,7 +263,12 @@ def make_details(info):
         "rating": round(float(info.get("vote_average") or 0), 1),
         "runtime": int(info.get("runtime") or 0),
         "genres": [g.get("name") for g in info.get("genres") or [] if g.get("name")],
+        "directors": names([p for p in crew if p.get("job") == "Director"], 3),
+        "writers": names([p for p in crew if p.get("job") in WRITER_JOBS], 3),
+        "cast": names(cast, 8),
+        "countries": [c.get("name") for c in info.get("production_countries") or [] if c.get("name")][:3],
         "overview": overview,
+        "format": DETAILS_FORMAT,
     }
     return json.dumps(details, ensure_ascii=True, indent=1)
 

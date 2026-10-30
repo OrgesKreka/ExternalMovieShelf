@@ -236,6 +236,7 @@ var Player = (function () {
 		if (!active) { return; }
 		Log.add('Playback finished');
 		Store.clear(movie.path);
+		Store.setWatched(movie.path, true);
 		leave(false);
 	}
 
@@ -286,7 +287,11 @@ var Player = (function () {
 		var sec = Math.floor(curMs / 1000);
 		if (save && curMs > 0) {
 			if (sec >= MIN_SAVE && (!durMs || durMs / 1000 - sec > MIN_SAVE)) { Store.set(movie.path, sec); }
-			else { Store.clear(movie.path); }
+			else {
+				Store.clear(movie.path);
+				/* stopped within the last minute (the credits): that counts as watched to the end */
+				if (sec >= MIN_SAVE && durMs) { Store.setWatched(movie.path, true); }
+			}
 		}
 		try { plugin.Stop(); } catch (e) { Log.add('Stop failed: ' + e); }
 		if (tick) { clearInterval(tick); tick = null; }

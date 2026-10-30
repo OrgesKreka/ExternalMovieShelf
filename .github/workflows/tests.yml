@@ -23,6 +23,10 @@ jobs:
         run: node test/info.test.js
       - name: Player logic
         run: node test/player.test.js
+      - name: Saved positions and marks
+        run: node test/store.test.js
+      - name: Shelf, details screen and watched marks
+        run: node test/shelf.test.js
       - name: Volume keys and the volume bar
         run: node test/volume.test.js
       - name: On-screen log and its upload

@@ -67,7 +67,25 @@ var Info = (function () {
 		return parts.join(SEP);
 	}
 
-	return { load: load, parse: parse, runtime: runtime, meta: meta };
+	function first(list, n) { return list && list.length ? list.slice(0, n) : []; }
+
+	/* The people and places shown under the plot, as [{label, text}]. Parts the file does not have are left
+	   out (files from older versions only have the plain details). */
+	function rows(d) {
+		var out = [], dirs, writers, cast, countries;
+		if (!d) { return out; }
+		dirs = first(d.directors, 3);
+		writers = first(d.writers, 3);
+		cast = first(d.cast, 8);
+		countries = first(d.countries, 3);
+		if (dirs.length) { out.push({ label: dirs.length > 1 ? 'Directors' : 'Director', text: dirs.join(', ') }); }
+		if (writers.length) { out.push({ label: writers.length > 1 ? 'Writers' : 'Writer', text: writers.join(', ') }); }
+		if (cast.length) { out.push({ label: 'Cast', text: cast.join(', ') }); }
+		if (countries.length) { out.push({ label: countries.length > 1 ? 'Countries' : 'Country', text: countries.join(', ') }); }
+		return out;
+	}
+
+	return { load: load, parse: parse, runtime: runtime, meta: meta, rows: rows };
 })();
 
 if (typeof module !== 'undefined' && module.exports) { module.exports = Info; }

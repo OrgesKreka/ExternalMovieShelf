@@ -77,6 +77,16 @@ body.playing #shelf { display: none; }
 	-webkit-border-radius: 8px; border-radius: 8px;
 }
 
+/* "Watched to the end" badge: an eye, top right of the poster. The eye is drawn with borders (no image). */
+.eye { position: absolute; left: 5px; top: 5px; width: 16px; height: 8px; border: 2px solid #ffb400; -webkit-border-radius: 50%; border-radius: 50%; }
+.eye i { position: absolute; left: 5px; top: 1px; width: 6px; height: 6px; background: #ffb400; -webkit-border-radius: 3px; border-radius: 3px; }
+.cseen {
+	display: none; position: absolute; right: 5px; top: 5px; width: 30px; height: 22px;
+	background: #000000; background: rgba(8, 10, 16, 0.85);
+	-webkit-border-radius: 11px; border-radius: 11px;
+}
+.cseen .eye { left: 5px; top: 5px; }
+
 /* Vertical scroll indicator */
 #track { position: absolute; left: 924px; top: 60px; width: 5px; height: 440px; background: rgba(255, 255, 255, 0.12); -webkit-border-radius: 3px; border-radius: 3px; }
 #thumb { position: absolute; left: 0px; top: 0px; width: 5px; height: 80px; background: #ffb400; -webkit-border-radius: 3px; border-radius: 3px; }
@@ -99,7 +109,17 @@ body.playing #info { display: none; }
 #infoTitle { position: absolute; left: 284px; top: 62px; width: 640px; height: 40px; font-size: 30px; line-height: 40px; font-weight: bold; overflow: hidden; white-space: nowrap; color: #ffffff; }
 #infoTag { position: absolute; left: 284px; top: 104px; width: 640px; height: 20px; font-size: 15px; font-style: italic; overflow: hidden; white-space: nowrap; color: #c3ccd9; }
 #infoMeta { position: absolute; left: 284px; top: 132px; width: 640px; height: 22px; font-size: 15px; overflow: hidden; white-space: nowrap; color: #ffb400; }
-#infoText { position: absolute; left: 284px; top: 170px; width: 636px; height: 275px; font-size: 17px; line-height: 25px; overflow: hidden; color: #e8ecf1; }
+#infoText { position: absolute; left: 284px; top: 164px; width: 636px; height: 150px; font-size: 17px; line-height: 25px; overflow: hidden; color: #e8ecf1; }
+#infoCredits { position: absolute; left: 284px; top: 322px; width: 636px; height: 124px; overflow: hidden; }
+.irow { position: relative; margin-bottom: 3px; padding-left: 86px; font-size: 15px; line-height: 21px; color: #e8ecf1; }
+.irow b { position: absolute; left: 0px; top: 0px; width: 80px; font-size: 12px; font-weight: bold; text-transform: uppercase; color: #ffb400; }
+#infoSeen { position: absolute; left: 284px; top: 452px; width: 636px; height: 24px; font-size: 14px; color: #8a96a8; }
+#infoSeen .eye { left: 0px; top: 3px; border-color: #6c7889; }
+#infoSeen .eye i { background: #6c7889; }
+#infoSeen.on { color: #ffb400; }
+#infoSeen.on .eye { border-color: #ffb400; }
+#infoSeen.on .eye i { background: #ffb400; }
+#infoSeen span { position: absolute; left: 30px; top: 1px; white-space: nowrap; }
 #infoHint { position: absolute; left: 48px; top: 496px; width: 860px; font-size: 12px; color: #8a96a8; }
 #infoHint b { color: #c3ccd9; }
 
