@@ -6,7 +6,7 @@ var path = require('path');
 var vm = require('vm');
 
 var JS = path.join(__dirname, '..', 'widget', 'js');
-var INFO = 31, YELLOW = 21, LEFT = 4, RIGHT = 5, RETURN = 88, ENTER = 29443;
+var FF = 72, GREEN = 20, INFO = 31, YELLOW = 21, LEFT = 4, RIGHT = 5, RETURN = 88, ENTER = 29443;
 
 var A = '/dtv/usb/sda1/Filma/Alien (1979) [tmdbid-348]';
 var B = '/dtv/usb/sda1/Filma/Blade Runner (1982)';
@@ -50,8 +50,16 @@ function makeEl(tag) {
 /* opts.alienFile: another details file for Alien on the drive. */
 function fresh(opts) {
 	opts = opts || {};
-	var files = {};
+	var files = {}, tree = {};
 	Object.keys(FILES).forEach(function (k) { files[k] = FILES[k]; });
+	Object.keys(TREE).forEach(function (k) { tree[k] = TREE[k].slice(); });
+	if (opts.moreMovies) {                                            /* Casablanca 102 min, Zodiac 157 min */
+		tree['/dtv/usb/sda1/Filma'].push(dir('Casablanca (1942)'), dir('Zodiac (2007)'));
+		tree['/dtv/usb/sda1/Filma/Casablanca (1942)'] = [file('c.mp4'), file('c.tmdb.json')];
+		tree['/dtv/usb/sda1/Filma/Zodiac (2007)'] = [file('z.mp4'), file('z.tmdb.json')];
+		files['/dtv/usb/sda1/Filma/Casablanca (1942)/c.tmdb.json'] = JSON.stringify({ format: 2, title: 'Casablanca', year: '1942', runtime: 102 });
+		files['/dtv/usb/sda1/Filma/Zodiac (2007)/z.tmdb.json'] = JSON.stringify({ format: 2, title: 'Zodiac', year: '2007', runtime: 157 });
+	}
 	if (opts.alienFile !== undefined) { files[A + '/alien.tmdb.json'] = opts.alienFile; }
 	var els = {}, timers = [], logs = [], played = [], now = 0;
 	function el(id) { if (!els[id]) { els[id] = makeEl('div'); els[id].id = id; } return els[id]; }
@@ -66,7 +74,7 @@ function fresh(opts) {
 		this.onreadystatechange();
 	};
 	function FakeFs() {}
-	FakeFs.prototype.readDir = function (p) { return TREE.hasOwnProperty(p) ? TREE[p] : null; };
+	FakeFs.prototype.readDir = function (p) { return tree.hasOwnProperty(p) ? tree[p] : null; };
 	FakeFs.prototype.isValidCommonPath = function () { return true; };
 	FakeFs.prototype.createCommonDir = function () {};
 	FakeFs.prototype.openCommonFile = function () { return null; };
@@ -107,7 +115,47 @@ function fresh(opts) {
 }
 
 var tests = [];
+function titles(t) { return t.el('grid').children.map(function (c) { return c.children[1].innerText; }); }
 function test(name, fn) { tests.push({ name: name, fn: fn }); }
+
+test('FF orders the shelf by length: shortest first, then longest first, then back to A to Z', function () {
+	var t = fresh({ moreMovies: true });
+	assert.deepEqual(titles(t), ['Alien', 'Blade Runner', 'Casablanca', 'Zodiac']);
+	t.press(FF);
+	assert.deepEqual(titles(t), ['Casablanca', 'Alien', 'Zodiac', 'Blade Runner']);   /* no details: last */
+	assert.equal(t.el('hCount').innerText, '4 movies - shortest first');
+	t.press(FF);
+	assert.deepEqual(titles(t), ['Zodiac', 'Alien', 'Casablanca', 'Blade Runner']);
+	assert.equal(t.el('hCount').innerText, '4 movies - longest first');
+	t.press(FF);
+	assert.deepEqual(titles(t), ['Alien', 'Blade Runner', 'Casablanca', 'Zodiac']);
+	assert.equal(t.el('hCount').innerText, '4 movies');
+});
+
+test('sorted by length, each movie shows its length where the year was', function () {
+	var t = fresh({ moreMovies: true });
+	var years = function () { return t.el('grid').children.map(function (c) { return c.children[2].innerText; }); };
+	assert.deepEqual(years(), ['1979', '1982', '1942', '2007']);
+	t.press(FF);
+	assert.deepEqual(years(), ['1h 42m', '1h 57m', '2h 37m', '1982']);   /* a movie without a length keeps its year */
+});
+
+test('the selection stays on the same movie when the order changes', function () {
+	var t = fresh({ moreMovies: true });
+	t.press(RIGHT); t.press(RIGHT); t.press(RIGHT);                    /* Zodiac */
+	t.press(FF);
+	t.press(INFO);
+	assert.equal(t.el('infoTitle').innerText, 'Zodiac');
+});
+
+test('a rescan puts the shelf back to A to Z', function () {
+	var t = fresh({ moreMovies: true });
+	t.press(FF);
+	t.press(GREEN);
+	t.advance(200);
+	assert.deepEqual(titles(t), ['Alien', 'Blade Runner', 'Casablanca', 'Zodiac']);
+	assert.equal(t.el('hCount').innerText, '4 movies');
+});
 
 test('the shelf lists the movies in title order', function () {
 	var t = fresh();

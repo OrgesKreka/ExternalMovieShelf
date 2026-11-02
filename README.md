@@ -4,7 +4,7 @@
 
 Plug a USB drive into a Samsung F-series TV (2013, "Orsay" Smart Hub) and its built-in browser shows a wall of grey folder icons and plays files with no cover art. Movie Shelf replaces that with a poster grid, a details screen, and a proper player with resume and subtitles. It runs on the TV itself. No streaming box, no PC left running, no server.
 
-Built and tested on a Samsung UE46F6500. Current version: **0.2.9**.
+Built and tested on a Samsung UE46F6500. Current version: **0.2.12**.
 
 ## Before and after
 
@@ -122,6 +122,7 @@ Already have posters that are too big for the TV? `python tools/posters.py E:\ -
 | Shelf | Enter / Play | Play |
 | Shelf | **Info** | Details screen |
 | Shelf | Yellow | Jump to the next letter |
+| Shelf | Fast-forward (>>) | Order the shelf: A to Z, shortest first, longest first (lengths come from the details files; movies without one go last) |
 | Shelf | Green | Look for the drive and movies again |
 | Shelf | Blue | Show or hide the log (for troubleshooting). Opening it also sends the log to the PC |
 | Shelf | Red | Calibration screen (shows what the TV really displays) |

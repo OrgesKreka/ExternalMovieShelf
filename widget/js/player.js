@@ -9,6 +9,8 @@ var Player = (function () {
 	var movie = null;
 	var startAt = 0, curMs = 0, durMs = 0;
 	var osdTimer = null;
+	var watchdog = null;           /* fires when a started file never plays (the TV can fail without saying so) */
+	var START_WAIT = 15000;        /* ms to wait for the first time callback */
 	var tick = null, tickAt = 0;   /* smooths the 1 s time callback so subtitles change on time */
 
 	function $(id) { return document.getElementById(id); }
@@ -80,6 +82,13 @@ var Player = (function () {
 		if (!keep && !paused && !failed && focus < 0) { osdTimer = setTimeout(hideOsd, 5000); }
 	}
 
+	/* Big notice in the middle of the screen (null hides it). */
+	function showFail(text) {
+		var box = $('playFail');
+		box.innerHTML = text ? text + '<small>Press RETURN to go back</small>' : '';
+		box.style.display = text ? 'block' : 'none';
+	}
+
 	function subState() {
 		if (!movie || !movie.subs) { return '(none found)'; }
 		return Subs.count() ? (Subs.isEnabled() ? '(on)' : '(off)') : '(unreadable)';
@@ -102,6 +111,15 @@ var Player = (function () {
 		Log.add('Play ' + url);
 		applyArea();
 		plugin.Play(url);
+		if (watchdog) { clearTimeout(watchdog); }
+		watchdog = setTimeout(function () {
+			watchdog = null;
+			if (!active || failed || curMs > 0) { return; }
+			Log.add('Nothing played after ' + START_WAIT / 1000 + ' s');
+			failed = true;
+			showFail('This file does not play on this TV.<br>Most likely it is H.265 / HEVC video.');
+			showOsd('Cannot play', true);
+		}, START_WAIT);
 	}
 
 	/* Make sure the TV's audio output is on, and log what it reports. */
@@ -228,6 +246,7 @@ var Player = (function () {
 	function onTime(ms) {
 		if (!active) { return; }
 		curMs = parseInt(ms, 10) || 0;
+		if (failed && curMs > 0) { failed = false; showFail(null); showOsd(''); }   /* the retry worked after all */
 		tickAt = new Date().getTime();
 		if ($('osd').style.display === 'block') { draw(); }
 	}
@@ -243,16 +262,17 @@ var Player = (function () {
 	function onError(code) {
 		if (!active) { return; }
 		Log.add('Player error ' + code);
+		/* Say so at once: the retry below often stays silent (H.265 video), which would leave a dark screen. */
+		failed = true;
+		showFail('This file does not play on this TV (error ' + code + ').<br>Most likely it is H.265 / HEVC video.');
+		showOsd('Cannot play', true);
 		if (!triedUrl) {
 			triedUrl = true;
 			try {
 				plugin.Stop();
 				start('file://' + encodeURI(movie.path));
-				return;
 			} catch (e) { Log.add('file:// retry threw: ' + e); }
 		}
-		failed = true;
-		showOsd('Cannot play this file (' + code + '). RETURN goes back.', true);
 	}
 
 	function toggle() {
@@ -294,10 +314,12 @@ var Player = (function () {
 			}
 		}
 		try { plugin.Stop(); } catch (e) { Log.add('Stop failed: ' + e); }
+		if (watchdog) { clearTimeout(watchdog); watchdog = null; }
 		if (tick) { clearInterval(tick); tick = null; }
 		Subs.clear();
 		if (osdTimer) { clearTimeout(osdTimer); osdTimer = null; }
 		hideOsd();
+		showFail(null);
 		document.body.className = '';
 		active = false;
 		if (onExit) { onExit(); }

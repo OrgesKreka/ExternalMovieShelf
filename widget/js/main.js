@@ -40,7 +40,7 @@ var Main = (function () {
 	   (1280x720 in the first builds) while actually displaying only the top-left 960x540, so scaling
 	   by the reported size made the page too big. The reported size is logged, not used. */
 	var BASE_W = 960, BASE_H = 540;
-	var VERSION = '0.2.9';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
+	var VERSION = '0.2.12';   /* keep in step with <ver> in config.xml (serve.py reads that one) */
 
 	function fit() {
 		var w = window.innerWidth || document.documentElement.clientWidth || 0;
@@ -203,6 +203,7 @@ var Main = (function () {
 		scanning = true;
 		if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
 		problem = '';
+		sortMode = 0;
 		if (!silent) {
 			clearGrid();
 			setStatus('Scanning USB drive...');
@@ -263,7 +264,7 @@ var Main = (function () {
 			g.appendChild(c.el);
 			cells.push(c);
 		}
-		$('hCount').innerText = problem ? '' : movies.length + ' movies';
+		$('hCount').innerText = problem ? '' : movies.length + ' movies' + (sortMode ? ' - ' + SORTS[sortMode] : '');
 		showProblem();
 		updateResume();
 		layout();
@@ -294,7 +295,7 @@ var Main = (function () {
 		title.className = 'ctitle';
 		title.innerText = m.title;
 		year.className = 'cyear';
-		year.innerText = m.year;
+		year.innerText = sortMode && m.runtime > 0 ? Info.runtime(m.runtime) : m.year;
 		res.className = 'cres';
 		seen.className = 'cseen';
 		seen.innerHTML = '<div class="eye"><i></i></div>';   /* the watched badge: an eye */
@@ -375,6 +376,64 @@ var Main = (function () {
 		$('thumb').style.top = (rows > VIS_ROWS ? Math.round(room * scroll / (rows - VIS_ROWS)) : 0) + 'px';
 		$('pos').innerText = cells.length ? (sel + 1) + ' / ' + cells.length : '';
 		$('letter').innerText = cells.length ? Usb.sortKey(cells[sel].movie.title).charAt(0).toUpperCase() : '';
+	}
+
+	/* Order of the shelf: A to Z, then by length. Lengths come from the details files on the drive (tools/tmdb_posters.py);
+	   movies without one go last. FF cycles. A rescan puts the shelf back to A to Z. */
+	var SORTS = ['A to Z', 'shortest first', 'longest first'];
+	var sortMode = 0;
+	var sorting = false;
+
+	function readLengths(done) {
+		var todo = [], left, i;
+		function one(m) {
+			Info.load(m.info, function (d) {
+				m.runtime = d && parseInt(d.runtime, 10) > 0 ? parseInt(d.runtime, 10) : 0;
+				left--;
+				if (left === 0) { done(); }
+			});
+		}
+		for (i = 0; i < movies.length; i++) { if (movies[i].runtime === undefined) { todo.push(movies[i]); } }
+		if (!todo.length) { done(); return; }
+		left = todo.length;
+		for (i = 0; i < todo.length; i++) { one(todo[i]); }
+	}
+
+	function byTitle(a, b) {
+		var ka = Usb.sortKey(a.title), kb = Usb.sortKey(b.title);
+		if (ka < kb) { return -1; }
+		if (ka > kb) { return 1; }
+		return a.path < b.path ? -1 : 1;
+	}
+
+	function byLength(a, b) {
+		var la = a.runtime > 0 ? a.runtime : 0, lb = b.runtime > 0 ? b.runtime : 0;
+		if (!la || !lb) { return la === lb ? byTitle(a, b) : (la ? -1 : 1); }
+		if (la !== lb) { return sortMode === 2 ? lb - la : la - lb; }
+		return byTitle(a, b);
+	}
+
+	function applySort() {
+		var keep = cells.length ? cells[sel].movie : null, i;
+		for (i = 0; i < cells.length; i++) { unloadPoster(cells[i]); }
+		while ($('grid').firstChild) { $('grid').removeChild($('grid').firstChild); }
+		cells = [];
+		movies.sort(sortMode ? byLength : byTitle);
+		build();
+		for (i = 0; i < cells.length; i++) { if (cells[i].movie === keep) { select(i); break; } }
+	}
+
+	function cycleSort() {
+		if (!cells.length || scanning || sorting) { return; }
+		sortMode = (sortMode + 1) % SORTS.length;
+		if (!sortMode) { applySort(); return; }
+		sorting = true;
+		$('hCount').innerText = 'Reading lengths...';
+		readLengths(function () {
+			sorting = false;
+			applySort();
+			Log.add('Shelf sorted ' + SORTS[sortMode]);
+		});
 	}
 
 	function nextLetter() {
@@ -590,6 +649,9 @@ var Main = (function () {
 			break;
 		case tvKey.KEY_YELLOW:
 			nextLetter();
+			break;
+		case tvKey.KEY_FF:
+			cycleSort();
 			break;
 		case tvKey.KEY_GREEN:
 			rescan();

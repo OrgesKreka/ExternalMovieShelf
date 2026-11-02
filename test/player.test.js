@@ -107,6 +107,7 @@ test('a paused movie keeps the controls up', function () {
 	var t = fresh();
 	t.P.play(MOVIE);
 	t.P.onBuffered();
+	t.P.onTime(1000);
 	t.key(TV.KEY_ENTER);
 	t.timers.advance(20000);
 	assert.equal(t.el('osd').style.display, 'block');
@@ -388,7 +389,7 @@ test('a play error retries once with a file:// address, then gives up on screen'
 	assert.equal(t.last('Play:'), 'Play:file://' + encodeURI(MOVIE.path));
 	t.P.onError(1);
 	assert.ok(t.P.isActive());
-	assert.ok(t.el('osdMsg').innerText.indexOf('Cannot play this file') === 0);
+	assert.equal(t.el('playFail').style.display, 'block');
 	assert.ok(t.key(TV.KEY_ENTER));                               /* any of ENTER / RETURN / STOP leaves */
 	assert.equal(t.P.isActive(), false);
 });
@@ -398,6 +399,52 @@ test('a throwing player does not crash the page', function () {
 	t.plugin.Play = function () { throw new Error('boom'); };
 	t.P.play(MOVIE);                                              /* onError path, then the retry throws too */
 	assert.ok(t.has('Play threw') || t.has('file:// retry threw'));
+});
+
+test('a play error is shown at once, not after a wait', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.P.onError(2);
+	assert.equal(t.el('playFail').style.display, 'block');
+	assert.ok(t.el('playFail').innerHTML.indexOf('error 2') > 0);
+	assert.equal(t.last('Play:'), 'Play:file://' + encodeURI(MOVIE.path));   /* the retry still runs */
+	assert.ok(t.key(TV.KEY_ENTER));
+	assert.equal(t.P.isActive(), false);
+});
+
+test('the message goes away when the retry plays', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.P.onError(2);
+	t.P.onTime(1000);
+	assert.equal(t.el('osdMsg').innerText, '');
+	assert.equal(t.el('playFail').style.display, 'none');
+	t.key(TV.KEY_ENTER);
+	assert.ok(t.P.isActive());                                    /* ENTER now pauses instead of leaving */
+});
+
+test('a file that stays silent for 15 seconds gets the message too', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.timers.advance(14000);
+	assert.equal(t.has('Nothing played'), false);
+	t.timers.advance(2000);
+	assert.ok(t.has('Nothing played'));
+	assert.equal(t.el('playFail').style.display, 'block');
+	assert.ok(t.el('playFail').innerHTML.indexOf('does not play on this TV') >= 0);
+});
+
+test('a file that plays is not flagged, and leaving cancels the wait', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.P.onTime(1000);
+	t.timers.advance(30000);
+	assert.equal(t.has('Nothing played'), false);
+	var u = fresh();
+	u.P.play(MOVIE);
+	u.key(TV.KEY_RETURN);
+	u.timers.advance(30000);
+	assert.equal(u.has('Nothing played'), false);
 });
 
 /* ---- run ---- */

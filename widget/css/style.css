@@ -134,6 +134,15 @@ body.playing #info { display: none; }
 }
 body.osd #sub { top: 270px; }
 
+/* Big notice in the middle when a file cannot be played */
+#playFail {
+	display: none; position: absolute; left: 120px; top: 150px; width: 640px; padding: 24px 40px; text-align: center;
+	font-size: 26px; line-height: 34px; color: #ffffff;
+	background: #000000; background: rgba(120, 20, 20, 0.92);
+	-webkit-border-radius: 12px; border-radius: 12px;
+}
+#playFail small { display: block; margin-top: 12px; font-size: 16px; color: #e8c8c8; }
+
 /* Playback OSD: title, progress with times, transport buttons, key hints */
 #osd {
 	display: none; position: absolute; left: 40px; top: 372px; width: 880px; height: 150px;
