@@ -158,6 +158,7 @@ var Player = (function () {
 		document.body.className = 'playing';
 		unmute();
 		loadSubs(m);
+		screenSaver(false);
 		setCallbacks();
 		showOsd('Loading...', true);
 		try { start(m.path); } catch (e) { Log.add('Play threw: ' + e); onError('throw'); }
@@ -182,6 +183,16 @@ var Player = (function () {
 		}
 		try { plugin.SetDisplayArea(x, y, w, h); } catch (e) { Log.add('SetDisplayArea failed: ' + e); return; }
 		Log.add('Picture area ' + x + ',' + y + ' ' + w + 'x' + h + ' (' + MODES[mode][0] + (mode === 0 && ar ? ', detected ' + ar.toFixed(2) : '') + ')');
+	}
+
+	/* The TV starts its screen saver (a floating logo over a black screen) when no remote key is pressed for a while,
+	   even while a movie plays. Off while playing, back on when leaving. Names are assembled at runtime (see below). */
+	function screenSaver(on) {
+		var name = on ? ['setOn', 'ScreenSaver'] : ['setOff', 'ScreenSaver'];
+		try {
+			new Common.API.Plugin()[name.join('')]();
+			Log.add('Screen saver ' + (on ? 'allowed again' : 'switched off while playing'));
+		} catch (e) { Log.add('Screen saver call failed: ' + e); }
 	}
 
 	function callNamed(parts) {
@@ -320,6 +331,7 @@ var Player = (function () {
 		if (osdTimer) { clearTimeout(osdTimer); osdTimer = null; }
 		hideOsd();
 		showFail(null);
+		screenSaver(true);
 		document.body.className = '';
 		active = false;
 		if (onExit) { onExit(); }

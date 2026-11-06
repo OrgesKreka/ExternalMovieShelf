@@ -61,6 +61,10 @@ function fresh(opts) {
 	var ctx = vm.createContext({
 		document: { getElementById: el, body: { className: '' } },
 		Log: { add: function (m) { logs.push(m); } },
+		Common: opts.noSaver ? undefined : { API: { Plugin: function () {
+			this['setOff' + 'ScreenSaver'] = function () { calls.push('SaverOff'); };
+			this['setOn' + 'ScreenSaver'] = function () { calls.push('SaverOn'); };
+		} } },
 		setTimeout: timers.setTimeout, setInterval: timers.setInterval,
 		clearTimeout: timers.clear, clearInterval: timers.clear
 	});
@@ -445,6 +449,22 @@ test('a file that plays is not flagged, and leaving cancels the wait', function 
 	u.key(TV.KEY_RETURN);
 	u.timers.advance(30000);
 	assert.equal(u.has('Nothing played'), false);
+});
+
+test('the TV screen saver is switched off while playing and allowed again after leaving', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	assert.ok(t.calls.indexOf('SaverOff') >= 0);
+	assert.equal(t.calls.indexOf('SaverOn'), -1);
+	t.key(TV.KEY_RETURN);
+	assert.ok(t.calls.indexOf('SaverOn') > t.calls.indexOf('SaverOff'));
+});
+
+test('a TV without the screen saver call still plays', function () {
+	var t = fresh({ noSaver: true });
+	t.P.play(MOVIE);
+	assert.ok(t.has('Screen saver call failed'));
+	assert.ok(t.calls.some(function (c) { return c.indexOf('Play:') === 0; }));
 });
 
 /* ---- run ---- */

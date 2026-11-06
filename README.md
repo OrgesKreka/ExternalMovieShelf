@@ -4,7 +4,7 @@
 
 Plug a USB drive into a Samsung F-series TV (2013, "Orsay" Smart Hub) and its built-in browser shows a wall of grey folder icons and plays files with no cover art. Movie Shelf replaces that with a poster grid, a details screen, and a proper player with resume and subtitles. It runs on the TV itself. No streaming box, no PC left running, no server.
 
-Built and tested on a Samsung UE46F6500. Current version: **0.2.12**.
+Built and tested on a Samsung UE46F6500. Current version: **0.2.13**.
 
 ## Before and after
 
