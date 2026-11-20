@@ -293,6 +293,55 @@ test('leaving after 5 minutes saves the position', function () {
 	assert.equal(leaveAt(300000, 7200000).Store.get(MOVIE.path), 300);
 });
 
+function playTo(t, sec) { t.P.onTime(sec * 1000); }
+
+test('the position is saved while playing, so a power-off loses at most a minute', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.P.onInfo();
+	t.P.onBuffered();
+	playTo(t, 40);
+	t.timers.advance(60000);
+	assert.equal(t.Store.get(MOVIE.path), 0);                      /* too early to be worth remembering */
+	playTo(t, 3000);
+	t.timers.advance(60000);
+	assert.equal(t.Store.get(MOVIE.path), 3000);
+	playTo(t, 3010);
+	t.timers.advance(60000);
+	assert.equal(t.Store.get(MOVIE.path), 3000);                   /* barely moved: no new write */
+	playTo(t, 3100);
+	t.timers.advance(60000);
+	assert.equal(t.Store.get(MOVIE.path), 3100);
+});
+
+test('jumping back is saved too', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.P.onInfo();
+	playTo(t, 3000);
+	t.timers.advance(60000);
+	playTo(t, 2500);
+	t.timers.advance(60000);
+	assert.equal(t.Store.get(MOVIE.path), 2500);
+});
+
+test('the credits are not saved as a position, and nothing is saved after leaving', function () {
+	var t = fresh();
+	t.P.play(MOVIE);
+	t.P.onInfo();
+	playTo(t, 7200 - 30);                                           /* 30 s left of a 2 h movie */
+	t.timers.advance(60000);
+	assert.equal(t.Store.get(MOVIE.path), 0);
+	var u = fresh();
+	u.P.play(MOVIE);
+	u.P.onInfo();
+	playTo(u, 3000);
+	u.key(TV.KEY_RETURN);
+	u.Store.clear(MOVIE.path);
+	u.timers.advance(180000);
+	assert.equal(u.Store.get(MOVIE.path), 0);
+});
+
 test('STOP saves it too', function () {
 	assert.equal(leaveAt(300000, 7200000, TV.KEY_STOP).Store.get(MOVIE.path), 300);
 });

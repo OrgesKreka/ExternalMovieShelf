@@ -159,6 +159,7 @@ var Player = (function () {
 		unmute();
 		loadSubs(m);
 		screenSaver(false);
+		keepPosition();
 		setCallbacks();
 		showOsd('Loading...', true);
 		try { start(m.path); } catch (e) { Log.add('Play threw: ' + e); onError('throw'); }
@@ -314,6 +315,23 @@ var Player = (function () {
 		showOsd('Restart');
 	}
 
+	/* The position is also saved while playing: switching the TV off gives the widget no chance to save on the way
+	   out, and the TV may not have flushed a write made just before it went off. */
+	var SAVE_EVERY = 60000;
+	var saveTimer = null, savedSec = 0;
+
+	function keepPosition() {
+		if (saveTimer) { clearInterval(saveTimer); }
+		savedSec = 0;
+		saveTimer = setInterval(function () {
+			var sec = Math.floor(curMs / 1000);
+			if (!active || failed || sec < MIN_SAVE || Math.abs(sec - savedSec) < 20) { return; }
+			if (durMs && durMs / 1000 - sec <= MIN_SAVE) { return; }   /* the credits: leave() decides what that means */
+			savedSec = sec;
+			Store.set(movie.path, sec);
+		}, SAVE_EVERY);
+	}
+
 	function leave(save) {
 		var sec = Math.floor(curMs / 1000);
 		if (save && curMs > 0) {
@@ -327,6 +345,7 @@ var Player = (function () {
 		try { plugin.Stop(); } catch (e) { Log.add('Stop failed: ' + e); }
 		if (watchdog) { clearTimeout(watchdog); watchdog = null; }
 		if (tick) { clearInterval(tick); tick = null; }
+		if (saveTimer) { clearInterval(saveTimer); saveTimer = null; }
 		Subs.clear();
 		if (osdTimer) { clearTimeout(osdTimer); osdTimer = null; }
 		hideOsd();

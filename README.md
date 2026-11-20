@@ -4,7 +4,7 @@
 
 Plug a USB drive into a Samsung F-series TV (2013, "Orsay" Smart Hub) and its built-in browser shows a wall of grey folder icons and plays files with no cover art. Movie Shelf replaces that with a poster grid, a details screen, and a proper player with resume and subtitles. It runs on the TV itself. No streaming box, no PC left running, no server.
 
-Built and tested on a Samsung UE46F6500. Current version: **0.2.13**.
+Built and tested on a Samsung UE46F6500. Current version: **0.2.14**.
 
 ## Before and after
 
@@ -159,7 +159,7 @@ These are the known limits, so nothing comes as a surprise.
 
 **The TV and the install**
 - Developed on one TV (UE46F6500). Other models may report other screen sizes, lack some plugin calls, or not deliver the INFO key to widgets.
-- Resume positions are saved only when you leave after 1 minute and with more than 1 minute left. They live in a file on the TV, not on the drive, and so do the watched marks. A drive moved to another TV starts without them.
+- Resume positions are saved when you leave after 1 minute with more than 1 minute left, and also every minute while a movie plays, so switching the TV off in the middle loses at most about a minute. They live in a file on the TV, not on the drive, and so do the watched marks. A drive moved to another TV starts without them.
 - Every `serve.py` start adds a new entry to More Apps; delete the old ones by hand.
 - The plot is cut at about 430 characters, and its language is the one used when it was downloaded. Names (director, cast) come from TMDB as they are written there.
 - A details file written by an older version (no director or cast) is refreshed once by the next `tmdb_posters.py --apply`; it is the only existing file the script ever replaces.
